@@ -1,0 +1,16 @@
+Syntax : OK
+Test completed
+Syntax dom.js OK
+Start of dom.js test program
+Hello big world
+Test 1 : OK
+parse children for query
+Test 2 : OK
+parse children for query
+Test 3 - text editor : OK
+Test 4 - views : OK
+Test Test 6 - default content : OK
+Test Test 7 - data- prefix read only : OK
+Program checksum :  4111609174
+Program coverage :  {}
+Test completed

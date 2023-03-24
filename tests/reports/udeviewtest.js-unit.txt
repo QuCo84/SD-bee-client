@@ -1,0 +1,18 @@
+UD loaded
+Test start
+DOMtest : OK
+saveableParentTest:OK
+blockIdTest:OK
+insertListTest:OK
+insertTableTest:OK
+insertTextTest:OK
+Event:OK
+AddView:OK
+Floating menu
+Menu:KO NodeList {}
+ HTMLDivElement {
+  [Symbol(SameObject caches)]: [Object: null prototype] { childNodes: NodeList {} }
+} fmenu null  null
+    Text node: Floating menu
+Debug checksum: 315881117230
+Test completed
