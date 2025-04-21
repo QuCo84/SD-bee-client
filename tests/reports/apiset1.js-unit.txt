@@ -1,0 +1,2 @@
+Syntax OK
+apiset1.js Test completed

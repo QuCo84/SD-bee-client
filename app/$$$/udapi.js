@@ -9,7 +9,9 @@ class UDapi
     // API calls maps
     fctMap = {};
     detectErrors = false;
+    availableModules = null;
     loadable = null;
+    argsLoadable = {};
     
     /*
     ude_cmds = [ 
@@ -20,14 +22,14 @@ class UDapi
     ]; // 'floatConfig', 'reFloatConfig', 'rearmFloaterTO'
     */
     calc_cmds = [ 'redoDependencies', 'toggleSwitch'];
-    ud_cmds = [ 'setModel', 'copyModel', 'makeDirectory', 'translateTerm', 'onTrigger', 'docParameter', 'reload'];
+    ud_cmds = [ 'setModel', 'copyModel', 'makeDirectory', 'translateTerm', 'onTrigger', 'docParameter', 'reload', 'fetchElement'];
     clipboard_cmds = ['clipElement'];
     local_cmds = [
         'insertRow', 'showOneOfClass', 'setChanged', 'loadStyle',
         'copyPortion', 'grabPortionList', 'pageBanner', 'grabFromTable',
-        'loadModule', 'service', 'calculate', 'addCalculatorFunction', 'showNextInList',
+        'loadModule', 'service', 'calculate', 'addCalculatorFunction', 'showNextInList', 'showFirstInList', 
         'LED', 'env', 'switchHighlight', 'setupUDElinks', 'listAPI', 'getShortcut',
-        'raiseErrors', 'ignoreErrors', 'poll'
+        'raiseErrors', 'ignoreErrors', 'poll', 'isFunction'
     ];
    // Obsolete utility_cmds = [ 'copy', 'deepCopy', 'removeChildren', 'egaliseHeightOfClass', 'buildDisplayableDeviceList', 'botlog', 'dispatchNameChange'];
     afterClick = { 'Styler':"leftColumn.closeAll();"};
@@ -75,22 +77,6 @@ class UDapi
             this.udjson = ud.dom.udjson;
             this.cursor = ud.dom.cursor;
             this.udajax = ud.udajax;            
-            // Load other modules
-            if ( typeof UDutilities == "undefined") {                 
-                let script = "let api = window.ud.api;\n";
-                script += "api.utilities = new UDutilities( window.ud);\n";
-                //script += "api.addFunctions( api.utilities, api.utility_cmds);\n";
-                setTimeout( 
-                    function() { 
-                        window.ud.ude.loadScript( "ud-utilities/udutilities.js", script, "UDutilities", "UDutilities");
-                    },
-                    100
-                );
-            } else  {
-                this.utilities = new UDutilities( ud, this);
-                // this.addFunctions( api.utilities, api.utility_cmds);                
-                setTimeout( function() {API.botlogUpdate();}, 120000);                        
-            }
             if ( ud.apiBuffer_requests) this.buffer = this.dom.element( ud.apiBuffer_requests);
         }
         // Build fcts into this for API.fct calls to integrated modules
@@ -104,14 +90,16 @@ class UDapi
         
         window.API = this;
         if ( typeof process == 'object') API = this;
-        if ( this.dom.udjson) { API.json = this.dom.udjson;} // shortcut
+        if ( this.dom && this.dom.udjson) { API.json = this.dom.udjson;} // shortcut
         
         // Load API extension modules
         this.set1 = new UDapiSet1( this); 
         if ( typeof UDapiSet2 != "undefined") this.set2 = new UDapiSet2( this);
+        if ( typeof UDapiSet3 != "undefined") this.set3 = new UDapiSet3( this);
         if ( typeof UD_ressources_init == "function") UD_ressources_init( this.ud, this);
-        if ( typeof UD_content_init == "function") UD_content_init( this.ud);        
-        
+        if ( typeof UD_content_init == "function") UD_content_init( this.ud);
+        if ( typeof UDutilities_init == "function") this.utilities = UDutilities_init( this.ud, this);
+
         // Activate botlog 
         if ( typeof process == 'undefined') setTimeout( function() { API.botlogUpdate( "server");}, 300);
         
@@ -138,15 +126,11 @@ class UDapi
     {
         for ( let fcti=0; fcti < functions.length; fcti++) {
             let fct = functions[ fcti];
-            this.fctMap[ fct] = module;
             /*
-            if ( typeof this[ fct] == "undefined" || this[ fct] == "ERR") {    
-                this[ fct] = function() {
-                    //this.ud.botlogUpdate( 'set', fct, true, "API."+fct+" starting");
-                    return module[ fct]( arguments[0], arguments[1], arguments[2], arguments[3], arguments[4], arguments[5]);
-                    //this.ud.botlogUpdate( 'set', fct, true, "API."+fct+" finished");                
-                };
-            }*/
+            * IDEA Test for chained functions ie fctMap[x] = array
+            * +fctName or seperate function addFunctionToHook
+            */
+            this.fctMap[ fct] = module;
         }  
         // Capture dom & co here ?
     } // UDapi.addFunctions()
@@ -432,7 +416,8 @@ class UDapi
             // Remove class hidden from this DIV
             element.classList.remove( "hidden");
             // Add class hidden to all DIVs of same class 
-            var elements = document.getElementsByClassName( element.classList.item(0));
+            let elements = $$$.dom.elements( "div."+element.classList.item(0), element.parentNode);
+            //var elements = document.getElementsByClassName( element.classList.item(0));
             for ( var eli = 0; eli < elements.length; eli++)                     
             {
                 //if ( isNaN( eli)) break;
@@ -483,7 +468,7 @@ class UDapi
         }  // end of hn process
         // Go to window top
         let scroll = document.getElementById( 'scroll');
-        if (scroll) { 
+        if (scroll && element.classList.contains( 'part')) { 
             scroll.scrollTop = 0;
             window.scroll (0, 0);
         }
@@ -491,9 +476,9 @@ class UDapi
     } // UDapi.showOnePortion()
     
   /**  
-    * @api {JS} activateOneClass(elementOrId,disactivateOthers)
+    * @api {JS} activateOneOfClass(elementOrId,disactivateOthers)
     * @apiParam {string} id Id of element to show
-    * @apiParam {boolean} hideOthers If true hide all other elements of the same class as element id
+    * @apiParam {boolean} hideOthers If true (default) hide all other elements of the same class as element id
     * @apiGroup Styles
     *
     */
@@ -976,13 +961,22 @@ class UDapi
         if( typeof params_json != "object") params = JSON.parse( params_json);
         if ( !params) return false;
         params['service'] = service;
-        params['token'] = "token";
-        let uri = "/webdesk/"+serviceOid+"/AJAX_service/";
-        let context = { dataTarget:params['dataTarget'], dataSource:params['dataSource'],dataMap:params['dataMap']}; // 2DO map response field to element 
+        params['process'] = $$$.dom.textContent( 'UD_model'); 
+        params['task'] = this.dom.textContent( 'UD_dbName'); 
+        let uri = '/' + UD_SERVICE + '/' + serviceOid + "/AJAX_service/";
+        let context = { 
+            dataTarget:params['dataTarget'], 
+            dataSource:params['dataSource'],
+            dataMap:params['dataMap'],
+            dataReplace:params[ 'dataReplace'],
+            service:service,
+            waitPopup:true
+        };  
         let data = "form=INPUT_Service"+service+"&input_oid=SetOfValues--16-0&nServiceRequest="+encodeURIComponent( JSON.stringify( params));
         let me = this;
         if ( usePromise) {
-            await this.ud.udajax.serverRequestPromise( uri, "POST", data, context, me.serviceResponse);
+            //await this.ud.udajax.serverRequestPromise( uri, "POST", data, context, me.serviceResponse);
+            return this.ud.udajax.serverRequestPromise( uri, "POST", data, context, me.serviceResponse);
         } else this.ud.udajax.serverRequest( uri, "POST", data, context, me.serviceResponse);
     }
     service( service, params_json) {
@@ -993,10 +987,17 @@ class UDapi
         if( typeof params_json != "object") params = JSON.parse( params_json);
         if ( !params) return false;
         params['service'] = service;
-        params['token'] = "token";
-        let uri = "/webdesk/"+serviceOid+"/AJAX_service/";
-        let context = { dataTarget:params['dataTarget'], dataSource:params['dataSource'],dataMap:params['dataMap']}; // 2DO map response field to element 
-        let data = "form=INPUT_Service"+service+"&input_oid=SetOfValues--16-0&nServiceRequest="+encodeURIComponent( JSON.stringify( params));
+        params['process'] = $$$.dom.textContent( 'UD_model'); 
+        params['task'] = this.dom.textContent( 'UD_dbName'); 
+        let uri = '/' + UD_SERVICE + '/' + serviceOid + "/AJAX_service/";
+        let context = { 
+            dataTarget:params['dataTarget'], 
+            dataSource:params['dataSource'],
+            dataMap:params['dataMap'],
+            dataReplace:params[ 'dataReplace'],
+            service:service
+        };  
+        let data = "form=INPUT_Service"+"&input_oid=SetOfValues--16-0&nServiceRequest="+encodeURIComponent( JSON.stringify( params));
         let me = this;
         this.ud.udajax.serverRequest( uri, "POST", data, context, me.serviceResponse);
         return true;
@@ -1014,12 +1015,16 @@ class UDapi
         if ( !response.success) {
             banner += '<span class="error">'+response.message+'</span>';
             me.pageBanner( "temp", banner);
-            if ( context.promise) context.reject( context);
+            $$$.botlog( context.service, false, "Error service " + context.service + ": " + response.message);
+            //if ( context.promise) context.promise.reject( context);
             return;
         }
+        // Success
+        // if ( typeof context.bannerOnSuccess == "undefined" || context.bannerOnSuccess)
         banner += '<span class="success">'+response.message+'</span>';
-        let data = response.data;
-        me.pageBanner( "temp", banner);
+        $$$.pageBanner( "temp", banner);                
+        $$$.botlog( context.service, false, "Service " + context.service + ": success") ;
+        let data = response.data;       
         if ( data) {
             // Data is available
             let targetName = context.dataTarget;
@@ -1030,7 +1035,7 @@ class UDapi
                 let target = me.dom.element( targetName);
                 if ( !target) target = me.dom.elementByName( targetName);
                 //let target = me.dom.element( "[name='" + targetName + "']", "document");
-                let value = me.json.value( data, sourceName);
+                let value = ( sourceName == 'value') ? response.value : me.json.value( data, sourceName);
                 if ( target && value) {
                     let targetExTag = me.dom.attr( target, 'exTag');
                     // Patch for gen text demo need a callback or then
@@ -1049,20 +1054,22 @@ class UDapi
                         }
                         // else ignore
                     } else if ( 
-                        targetName == "UD_spare" // always write over this element
+                        context.dataReplace
+                        || targetName == "UD_spare" // always write over this element
                         || !target.textContent
                         || target.textContent == me.dom.attr( target, 'ude_place') 
-                        || target.textContent == null || target.textContent == 'null'
+                        || target.textContent == null || target.textContent == 'null'                        
                     ) {
                         // Replace default content
                         if ( typeof value == "object") value = JSON.stringify( value);
                         target.textContent = value;
-                    } else {
-                        // Add to existing content
+                        me.ude.setChanged( target);                    
+                    } else if ( target.textContent != value) {
+                        // Add to existing content but only if response is different
                         target.textContent += "," + value;
+                        me.ude.setChanged( target);
                     }        
-                }
-                me.ude.setChanged( target);
+                }                
                 // ANd call a fct (initialise parent ?) = js
             } else if ( targetName && typeof dataMap != "undefined" && Object.keys( dataMap).length){
                 // Place data using map                
@@ -1156,7 +1163,22 @@ class UDapi
             let rowModel = this.dom.element( 'tr.rowModel', element);
             if ( rowModel) rowModel.style.display="block";
         }
-    } // UDAPI.showOneOfList()
+    } 
+
+    /**
+    * Show next element in a list
+    */
+    showFirstInList( elementIdList) {
+        // Displayed element and hide it           
+        let element = this.dom.element( elementIdList[ 0]);
+        if ( !element) return;
+        element.classList.remove( 'hidden');
+        // Hide others 
+        for ( let eli=1; eli < elementIdList.length; eli++) {
+            element = this.dom.element( elementIdList[ eli]);
+            if (element) element.classList.add( 'hidden');
+        }
+    }
     
    /**
     * Update the state of a virtual LED indicator
@@ -1282,6 +1304,15 @@ class UDapi
     ignoreErrors() { this.detectErrors=false;}
     
     isLoadable( fctName) {
+        let module = "";
+        for ( let mod in this.availableModules) {
+            if ( this.availableModules[ mod] && this.availableModules[ mod].indexOf( fctName) > -1) {
+                // Module found
+                module = mod;
+                break;
+            }
+        }
+        if ( module) return 'modules/$$$/' + module;
         if ( !this.loadable) this.loadable = $$$.json.parse( 'UD_loadable');        
         return $$$.json.value( this.loadable, fctName);
     }
@@ -1300,6 +1331,47 @@ class UDapi
     changeClass( ) { return this.ude.changeClass( arguments[0], arguments[1], arguments[2]);}
     reload() { return this.ud.reload( arguments[0], arguments[1], arguments[2]);}
     dom() { return this.dom;}
+
+    /*
+     * @api {js} $$$.loadFcts(fcts) Check a set of $$$ functions are available and load modules if needed
+     * @apiParam {string[]} fcts List of fct names to check
+     * @apiSuccess {integer} string - missing fcts, 0 - not available yet - loading, 1 - all loaded
+     * 
+     */ 
+    loadFcts( fcts) {
+        let modules = [];
+        let unavailable = "";
+        for ( let fcti = 0; fcti < fcts.length; fcti++) {
+            let fct = fcts[ fcti];
+            if ( typeof this.fctMap[ fct] == 'undefined') {
+                let module = this.isLoadable( fct);
+                if ( !module) unavailable += fct + ' ';
+                else if ( modules.indexOf( module) == -1) modules.push( module + version);
+            }
+        }
+        if ( unavailable) return unavailable.trim();
+        else if ( modules.length) {
+            require( modules);
+            return false;
+        }
+        return true;
+    }
+
+    loadAndRun( fcts, script) {
+        let modules = [];
+        for ( let fcti = 0; fcti < fcts.length; fcti++) {
+            let fct = fcts[ fcti];
+            if ( typeof this.fctMap[ fct] == 'undefined') {
+                let module = this.isLoadable( fct);
+                if ( module && modules.indexOf( module) == -1) modules.push( module + version);
+            }
+        }
+        require( modules, script);
+    }
+
+    isFunction( fct) {
+        return ( typeof this.fctMap[ fct] == 'object');
+    }
         
 } // JS class UDapi
  
@@ -1335,6 +1407,19 @@ function setupAPI( ud) {
             let module = target.fctMap[ prop];
             if ( module) { 
                 // console.log( "Using module", target.fctMap[ prop].moduleName);
+                /*
+                * code if we decide to chain functions
+                if ( typeof got == "object" && Array.isArray( got)) {
+                    // Module is an array of modules which provide the requested function, so call each in term
+                    return function(...args) {
+                        let r = [];
+                        for ( let fcti=0; fcti < module.length; fcti++) {
+                            r[] = module[ fcti][ prop].apply( module[ fcti], args);
+                        }
+                        return r;
+                    }
+                } else
+                */                
                 // If mapped function return functions result
                 return function (...args) {
                     let result = module[prop].apply(module, args);
@@ -1351,15 +1436,30 @@ function setupAPI( ud) {
                         // console.log(prop + JSON.stringify(args) + ' -> ' + JSON.stringify(result));
                         return result;
                     };
+
                 } else if ( typeof got == "undefined") {
                     // No function or variable with the requested name available in library                    
                     let hook = !(target.detectErrors);
                     let loadable = target.isLoadable( prop);
                     if ( loadable) {
+                        // Fetch resource (or module) and then run function
                         return function( ...args) {
-                            this.args = args; // or this.args[ prop] = args;
+                            api.argsLoadable[ prop] = args;
+                            /**
+                             * This will use baseURL inconfigrequire
+                             * To force public
+                             * global $PUBLIC;
+                             * if ( $PUBLIC) {
+                             *   // Version ?
+                             *   if ( get_class( $PUBLIC) != 'FileStorage') {
+                             *      $fc = $PUBLIC->getContents()
+                            *       file_put_contents( 'tmp/'.$filename, $fc)
+                             *      $loadable = '/tmp/'.$filename require( /tmp/ )
+                            *    }
+                            *  }
+                             */
                             require( [loadable + version], function() {
-                                let result = $$$[ prop]( ...$$$.args);
+                                let result = $$$[ prop]( ...api.argsLoadable[ prop]);
                                 return result;
                             });
                         }

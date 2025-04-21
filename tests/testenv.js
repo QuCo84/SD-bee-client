@@ -115,9 +115,9 @@ function loadTestEnvironment( requiredModules=[], testPage="") {
     UDapiBuffer_requests = udMod.UDapiBuffer_requests;    
     setupAPI = apiMod.init;
     UDapiSet1 = apiMod.SET1;
-    const zoneMod = require( "../app/tools/zone.js");
+    const zoneMod = require( "../app/modules-autoload/zone.js");
     Zone = zoneMod.class;
-    const textMod = require( "../app/elements/udetext.js");
+    const textMod = require( "../app/modules-autoload/udetext.js");
     UDEtext = textMod.UDEtext;
     const menuMod = require( "../app/helpers/udemenu.js");
     UDE_menu = menuMod.class; 
@@ -128,7 +128,7 @@ function loadTestEnvironment( requiredModules=[], testPage="") {
     window.lang = "FR"; // document.getElementById( 'UD_lang').textContent;
     window.scroll = function() {};
     module = {};
-    const htmlMod = require( "../app/elements/udehtml.js");
+    const htmlMod = require( "../modules/editors/udehtml.js");
     UDEhtml = htmlMod.UDEhtml;
     ejs = require("ejs/ejs.min.js");
     const request = require( 'request');

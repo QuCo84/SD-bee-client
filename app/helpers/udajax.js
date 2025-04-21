@@ -9,8 +9,7 @@
 
  
 
- class UDAJAX
- {
+ class UDAJAX {
    ud;
    dom;
    server;
@@ -27,6 +26,7 @@
    refreshAction = "AJAX_show";
    useNodejs = false;
    PHPcookie = "";
+   isOS = false;
  
     constructor( ud, server, service)
     {
@@ -35,6 +35,7 @@
       this.server = server;
       this.service = service;
       this.serverFormName = ud.serverFormName;
+      this.isOS = ( this.server && this.server.indexOf( 'sd-bee.com') == -1 && this.server.indexOf( 'rfolks.com') == -1)
       if ( typeof process == 'object') this.useNodejs = true;      
     }  
 
@@ -49,15 +50,35 @@
     }
     
     // Send a request to server and pre-process reponse before callback 
-    serverRequest( uri, method="GET", postdata="", context={}, successCallback= null, errorCallback=null)
-    {
-        // 2DO add service unless already present and replace for name change
+    serverRequest( uri, method="GET", postdata="", context={}, successCallback= null, errorCallback=null) {
+
+        if ( this.isOS ) {
+            // PATCH OS version - some tools have webdesk wired in there requests
+            uri = uri.replace( '/webdesk/', '/' + this.service + '/');
+        }
+
+        // Add service unless already present and replace for name change
         if ( uri.charAt(0) == '/') this.url = this.server+uri;
         else this.url = this.server+'/'+uri;
         
+        if ( this.isOS) {
+            // PATCH OS for GCP
+            if ( method == "POST" && ( this.server.indexOf( 'appspot') > -1 || this.server.indexOf('cloudshell') > -1)) this.url = this.server;
+            if ( method == "POST" && uri.indexOf( 'AJAX_clipboard') > -1) this.url = this.server + '/' + this.service + '/';
+        }
+
         this.method = method;
         context.uri = uri;
         context.url = this.url;
+
+        // Hook for debugging/filtering when using sdbee-client-min
+        if ( typeof serverTracker == 'function') {
+            if ( !serverTracker( {
+                status:'not sent yet', 
+                url : this.url,
+                data: postdata
+            })) return;
+        }
         
         if (this.useNodejs)
         {
@@ -65,8 +86,7 @@
             if ( method == "GET") this.nodejs_get( uri, context, successCallback, errorCallback);
             else if (  method == "POST" && TEST_serverSaving) this.nodejs_post( uri, postdata, context, successCallback, errorCallback);
             return;
-        }            
-        
+        }
         
         // Prepare request
         var xhttp = new XMLHttpRequest();
@@ -82,9 +102,17 @@
             {
                 // Delete from pending
                 if ( typeof this.udajax.pending[ this.serverRequestId] != "undefined" ) delete this.udajax.pending[ this.serverRequestId];
-                // Process from reply
-                if ( this.status == 200)
-                {
+                // Hook for debugging when using sdbee-client-min
+                if ( typeof serverTracker == 'function') {
+                    serverTracker( {
+                        status:this.status, 
+                        url : this.udajax.url,
+                        context: this.callerContext,
+                        response: this.responseText
+                    });
+                }
+                // Process reply
+                if ( this.status == 200) {
                     // Successful reply 
                     debug( { level:5}, "server response (requestid, url, context, response)", 
                         this.serverRequestId, this.udajax.url, this.callerContext, this.responseText
@@ -115,7 +143,11 @@
                     debug( { level:2}, "can't reach server with ", this.udajax.url);
                     if ( errorCallback) errorCallback( this.callerContext, this.status);
                     if ( this.callerContext.promise) {
-                        Promise.reject( this.callerContext.promise);
+                        try {
+                            Promise.reject( this.callerContext.promise);
+                        } catch ( e) {
+                            console.error( e);
+                        }
                     }
                 }
                 // 2DO only if set by me
@@ -135,10 +167,14 @@
         }
         xhttp.send( postdata);
         this.pending[ this.serverRequestId] = { method: this.method, url: this.url};
-        // Show that request has been sent
-        if ( context.action == "fill zone" && context.zone) {            
+        // Show that request has been sent ?
+        if ( 
+            ( typeof context.waitPopup != "undefined" && context.waitPopup)
+            || ( context.action == "fill zone" && context.zone) // backword comptability
+        ) {            
+            // Display a waiting/working popup
             if ( popup  && !popup.classList.contains( 'show')) {
-                popup.innerHTML = '<div style="text-align:center"><img src="/upload/3VUvtUCVi_processing.gif"></div>';
+                popup.innerHTML = '<div style="text-align:center"><img src="' + UDE_processingIcon + '"></div>'; // https://www.sd-bee.com/upload/3VUvtUCVi_processing.gif"></div>';
                 popup.classList.add( 'show');
             }
         }  
@@ -189,8 +225,9 @@
     // Fill context.element with content and run JS
     postSuccess( context, content, js)
     {
-        if ( context.action == "ignore") return;
-        else if ( context.action == "remove") {
+        if ( context.action == "ignore") {
+           // Do nothing
+        } else if ( context.action == "remove") {
             // Get element's view before deleting
             let view = this.dom.getView( context.element);            
             context.element.remove();
@@ -230,8 +267,10 @@
             debug( {level:4}, "Cursor restore set for 100ms");
         }
         // Run JS
-        if ( js) debug( {level:3}, "js to run", js);
-        if ( js) doOnload( js);
+        if ( js && context.action != "ignore") {
+            debug( {level:3}, "js to run", js);
+            doOnload( js);
+        }
     } //UDAJAX_postSuccess();
     
     // Fill element with content and run JS
@@ -245,7 +284,10 @@
             debug( {level:2}, "fill zone", context);
             document.getElementById( context.zone).innerHTML = content;
             // Update History dynamically if zone is document
-            if ( context.zone == "document") { this.ud.addToHistory( context.url);}
+            if ( context.zone == "document") { 
+                this.ud.addToHistory( context.url);
+                this.ud.initialise();
+            }        
         } else if (context.action == "set json") {
             let holder = this.dom.element( context.holder);
             let json = this.dom.udjson.parse( content);
@@ -257,10 +299,12 @@
             // Update History dynamically
             this.ud.addToHistory( context.url);
         } else if ( action == "reload") { 
-            // Load received document ( single page mode and testing)
-            document.open("text/html", "replace");
-            document.write( content); 
-            document.close();            
+            if ( typeof process == 'undefined') {
+                // Load received document ( single page mode and testing)
+                document.open("text/html", "replace");
+                document.write( content); 
+                document.close();            
+            }
             // Reset topElement pointers
             ud.topElement = ud.dom.topElement = ud.dom.element( "document");
         } else if ( action == "compositeUpdate") {
@@ -417,6 +461,7 @@
                 system: this.dom.udjson.parse( this.dom.attr( element, 'ud_extra'))
             };
             if ( fieldsToSave.indexOf( 'textra') > -1 && fieldsToSave.indexOf( 'tcontent') == -1) {
+                // Special case for params edit in manage view
                 let jsonData = this.dom.udjson.parse( element.getElementsByTagName( 'div')[0].textContent);
                 if ( jsonData.meta) {
                     // JSON100 format
@@ -708,7 +753,7 @@
             if ( this.js) { 
                 // var requirejs = require( '../../r.js');
                 let p1 = this.js.indexOf( 'require(');
-                const reqMod = require( '../../tests/testenv.js');              
+                const reqMod = require( '../tests/testenv.js');              
                 if ( p1) {                                              
                     this.js = this.js.replace( /require\(/g, 'reqMod.require(');
                     // process.exit( 0);
@@ -754,8 +799,8 @@ if ( typeof process == 'object')
         let url = 'webdesk/UniversalDocElement--21-725-21--UD|3|NO|OIDLENGTH|CD|5/show/tusername|demo/tpassword|demo/';
         testGet( url, ud);
         // testGet.then() => nextTest();
-        
-        //process.exit(0);
+        console.log( 'Test completed');
+        process.exit(0);
     }    
     else
     {

@@ -1,0 +1,2 @@
+Syntax:OK
+Start of test program

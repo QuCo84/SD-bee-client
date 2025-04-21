@@ -20,7 +20,7 @@
    autoId = 1;
    cssCalc = null;
    termCount = 0;
-   dayjs = null;
+   
        
     mathFunctions = [ 
         "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cbrt",
@@ -36,11 +36,11 @@
    localFunctions = [
         "lookup", "ajaxZoneCall", "style", "if", "row", "column", 
         "datestr", "json", "imageTag", "linkTag", "linkJStag", "metricTag", "multiCalc", 
-        "checkboxTag", "switchTag", "switchTagCallback", "toggleSwitch", "selectorTag",
+        "checkboxTag", "switchTag", "switchTagCallback", "toggleSwitch", "selectorTag", "getSingleChoice",
         "textContent2HTML", "substitute", "buildComposite",
         "buildJSONlist", "checkValue", "inList", "inBetween", "listNames", "listValues", "formatList", "removeAccents",
         "item", "trim", "uppercase", "titlecase", "orop", "oneOf", "defaultValue", "jsonKeys", "api",
-        "isName", "isDate", "array", "content", "uround", "value", "textReplace"
+        "isName", "isDate", "array", "content", "uround", "value", "textReplace", "attrPath"
     ];
     functions = {};
     dependencies = {};
@@ -52,18 +52,14 @@
         this.ude = ude;
         // Setup dayjs
         if ( typeof moment == "undefined" && ude && typeof process == "undefined") {
-            window.dayjs = require("vendor/dayjs/dayjs.min");
+            window.dayjs = require("dayjs");
             window.moment = window.dayjs;
             window.moment.locale( window.lang.toLowerCase());
-            /*
-            require(["vendor/dayjs/plugin/customParseFormat"+version], function ( customParseFormat) {  moment.extend( customParseFormat); });
-            require(["vendor/dayjs/plugin/relativeTime"+version], function ( relativeTime) {  moment.extend( relativeTime); });
-            if (window.lang.toLowerCase() == "fr") require(["vendor/dayjs/locale/fr"+version]); 
-            else if ( typeof moment != "undefined") moment.locale( 'en');
-            */
         }        
         // Add API functions
-        if ( typeof API != "undefined" && API) { API.addFunctions( this, [ 'redoDependencies', 'toggleSwitch', 'if']);}
+        if ( typeof API != "undefined" && API) { 
+            API.addFunctions( this, [ 'redoDependencies', 'toggleSwitch', 'if', 'selectorTag', 'getSingleChoice', 'getMultipleChoice']);
+        }
     }
    
     // Add a function
@@ -152,11 +148,15 @@
      this.litteral = false;
      this.quote = '';
      this.termCount = 0;     
-     for (var i=0; i < expr.length; i++)
-     {
-       var c = expr[i];
-       if ( this.delimiters.indexOf(c) > -1) token = this.addTokenToExpr( token, c);
-       else token += c;         
+     for (var i=0; i < expr.length; i++) {
+        var c = expr[i];
+        if ( this.delimiters.indexOf(c) > -1 && !( this.expr == "" && (c == '-' || c == '+'))) {
+            // Delimter - add token to expression
+            token = this.addTokenToExpr( token, c);
+        } else {
+            // Not a delimiter add to token
+            token += c;         
+        }
      }
      if (token) token = this.addTokenToExpr( token, null);
      return true;
@@ -169,7 +169,7 @@
    eval( expr, element) //, resetLastAccessedValues= true or clear
    {
      var r;
-     debug( {level:5}, "Computing ", this.expr, expr);     
+     debug( {level:4}, "Computing ", this.expr, expr);     
      // DOM_lastAccessedValues = []; // 2DO use fct clear, get and member variable?
      if ( !expr || !this.prepareForExec( expr) || this.expr.indexOf('ERR:') > -1) return "ERR";
      expr = expr.replace( /&quot;/g, "'"); // Patch for 1PMP
@@ -182,14 +182,15 @@
 
      try 
      { 
-       r = eval( this.expr); // this.expr is safe and has been parsed
-       debug( {level:4}, "Computed ", this.expr, expr, r);
+        r = eval( this.expr); // this.expr is safe and has been parsed
+        debug( {level:4}, "Computed ", this.expr, expr, r);
      }
      catch( error)
      {
-       r = "<span class=\"error\" title=\"error\">Err</span>";
-      debug( {level:0}, "ERR eval :",this.expr);
-      if ( DEBUG_level > 2) eval( this.expr); // for debugging
+        r = "Err";
+        debug( {level:0}, "ERR eval :",this.expr);
+        console.log( error);
+        if ( DEBUG_level > 2) eval( this.expr); // for debugging
      }
      return r;
    } // UDEcalc.exec()
@@ -260,11 +261,14 @@
             }
             // Run formula and set element's content with result
             window.UDEcalc_element = element;
-            let result = this.exec( expr);
+            let result = this.exec( expr);            
             this.dom.autoIndex1 = 0;
             this.dom.autoHome = "";
             if ( result == "...") this.markToUpdate( element, indexV, recurrent);
-            else element.innerHTML = result;
+            else {
+                element.innerHTML = result;
+                if ( typeof result == "string" && result.indexOf( 'ERR') == 0) element.classList.add( 'error'); else element.classList.remove( 'error');
+            }    
             if ( this.dom.elements( 'table', element).length) {
                 // Result contains table so arrange
                 this.dom.arrangeTables( element, false);
@@ -600,10 +604,9 @@
     */        
     row( selector="")
     {
-        // 2DO Number selector = offset from current row
         if ( !selector)
         {
-            // Current row
+            // No selector so return current row
             let cell = this.dom.autoHome;
             if ( !cell || this.dom.attr( cell, 'exTag') != "td") return -1;
             let row = cell.parentNode; // tr element
@@ -611,8 +614,11 @@
             while ( (row = row.previousElementSibling)) index++;
             return index+1;
         }
-        else
-        {
+        else if (!isNaN( selector)) {
+            // Selector is number, use as offset from current row
+            let rowIndex = this.row();
+            return rowIndex + selector;
+        } else {
             // Which table ?
             var tableId = this.dom.getParentAttribute( "table", "id", this.dom.autoHome);
             // Search row
@@ -667,21 +673,25 @@
     * @apiGroup Data
     *    
     */ 
-    datestr( expr, formatIn="DD/MM/YYYY hh:mm", formatOut = "")
+    datestr( expr, formatIn="", formatOut = "", future=false)
     {
         // Setup dayjs
         dayjs = this.dayjs;
         if ( !this.dayjs) {
-            dayjs = requirejs( 'vendor/dayjs/dayjs.min');            
-            let customParseFormat = requirejs('vendor/dayjs/plugin/customParseFormat');
-            let relativeTime = requirejs('vendor/dayjs/plugin/relativeTime');
-            let weekOfYear = requirejs('vendor/dayjs/plugin/weekOfYear');
+            this.dayjs = dayjs = requirejs( 'dayjs');
+            let customParseFormat = requirejs('dayjscdn/plugin/customParseFormat');
+            let relativeTime = requirejs('dayjscdn/plugin/relativeTime');
+            let weekOfYear = requirejs('dayjscdn/plugin/weekOfYear');
+            let locale = requirejs ( 'dayjscdn/locale/fr');
             dayjs.extend( customParseFormat);
             dayjs.extend( relativeTime);
             dayjs.extend( weekOfYear);
-            this.dayjs = dayjs;
-        }
-        dayjs.locale( window.lang.toLowerCase());           
+            // dayjs.extend( locale);
+            if ( typeof dayjs.locale == 'function') dayjs.locale( window.lang.toLowerCase());     
+            this.currentDate = null;           
+            this.currentWeek = -1;
+        }   
+                  
        // let val = ( expr) ? dayjs( expr, formatIn) : dayjs();
         let val = dayjs();
         if ( Array.isArray( formatIn)) {
@@ -690,28 +700,160 @@
                 val = dayjs( expr, formatIn[ formati]);
                 if ( val.isValid()) break;
             }
-        } else val = ( expr && formatIn) ? dayjs( expr, formatIn) : dayjs();
-
+        } else val = (formatIn) ? dayjs( expr, formatIn) : (expr) ? dayjs( expr, 'DD/MM/YYYY hh:mm') : dayjs();
         //if (val && expr.indexOf( '/') == -1) return val.format('DD/MM/YYYY');
-        if ( !val.isValid() && !formatOut) // typeof expr == "string")
-        {
-            // if today etc convert to date string
-            expr = expr.trim();
-            // Convert string to date string
-            switch ( expr) {
-                case "today" :
-                case "aujourd'hui" :
-                case "aujourdhui" :
-                    val = dayjs().format('DD/MM/YYYY');
+        if ( !val.isValid() && !(formatIn)) { // typeof expr == "string") 
+            // Interpret expression
+            expr = expr.trim();           
+            if ( !this.currentDate) this.currentDate = dayjs();
+            let d = this.currentDate;             
+            let lg = window.lang.toLowerCase();  
+            let daysOfWeek_short = {
+                'en':[ 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sunw', 'monw', 'tuew', 'wedw', 'thuw', 'friw', 'satw'],
+                'fr':[ 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim', 'lunpr', 'marpr', 'merpr', 'jeupr', 'venpr', 'sampr', 'dimpr',]
+            };
+            let expressionsLang = {
+                'en' : [
+                    '^today',
+                    '^tomorrow',
+                    '^(' + daysOfWeek_short[ 'en'].join( '|') + ') ([0-9]*)h([0-9]*)', // Mon 10h00, Tue 10h30
+                    '^\\+([0-9]*)d',
+                    '^\\+([0-9]*)h',                    
+                    '^([0-9]*)h([0-9]*)',
+                    '^([0-9]*)h',          
+                    '^week ([0-9]*)',
+                    '^([0-9][0-9])/([0-9][0-9])/([0-9][0-9][0-9][0-9]) ([0-9][0-9])h([0-9][0-9])',
+                    '^clear'
+                ],
+                'fr' : [
+                    "^aujourd'hui",
+                    '^demain',
+                    '^(' + daysOfWeek_short[ 'fr'].join( '|') + ') ([0-9]*)h([0-9]*)', // Lu 10h00, Je 10h30
+                    '^\\+([0-9]*)j',
+                    '^\\+([0-9]*)h',
+                    "^([0-9]*)h([0-9]*)",
+                    "^([0-9]*)h",                             
+                    '^semaine ([0-9]*)',
+                    '^([0-9][0-9])/([0-9][0-9])/([0-9][0-9][0-9][0-9]) ([0-9][0-9])h([0-9][0-9])',
+                    '^raz'
+                ]
+            };
+            /*
+            'fr' : { 'today':'aujourd'hui', 'day-time': '(Lu|Ma|Me|Je|Ve|Sa|Di)\s*([0-9]*)h'}
+            '
+            switch key day-time ... 
+            */
+            let expressions = expressionsLang[ lg];
+            let cmd = null;
+            for ( let expri=0; expri < expressions.length; expri++) {                
+                if ( !expressions[ expri]) continue;
+                let reg = new RegExp( expressions[ expri], "i");
+                cmd = expr.match( reg);
+               // console.log( cmd, reg, expr);
+                if ( cmd) {
+                    cmd[0] = expri+1;
+                    /*
+                    let lists = expri.split( '(');
+                    for ( let cmdi = 1; cmdi < cmd.length; cmdi++) {
+                        if 
+                    }
+                    */
                     break;
-                case "yesterday" :                    
-                case "hier" :
-                    val = dayjs().subtract(1, 'days').format('DD/MM/YYYY');
-                    break;
-                default :
-                    val = "ERR: "+expr+" not found";
-                    break;
+                }                
             }
+            if ( !cmd && lg != 'en') {
+                // Check again in english for programs
+                expressions = expressionsLang[ 'en'];
+                for ( let expri=0; expri < expressions.length; expri++) {                
+                    if ( !expressions[ expri]) continue;
+                    let reg = new RegExp( expressions[ expri], "i");
+                    cmd = expr.match( reg);
+                // console.log( cmd, reg, expr);
+                    if ( cmd) {
+                        cmd[0] = expri+1;
+                        break;
+                    }                
+                }
+            }
+            if ( cmd) {
+                function startOfWeek( weekNo) {
+                    let currentWeek = dayjs().week();
+                    d = dayjs();
+                    d = d.startOf( 'week'); //.add( 1, 'day');
+                    if ( weekNo >= currentWeek) d = d.add( ( weekNo - currentWeek) * 7, 'days');
+                    else d = d.subtract( ( currentWeek - weekNo) * 7, 'days');
+                    return d;
+                }
+                switch ( cmd[ 0]) {
+                    case 0 :                    
+                        break;
+                    case 1 : // Today
+                        d = d.subtract(1, 'days');
+                        this.currentDate = d;
+                        break;
+                    case 2 : // Tomorrow
+                        d = d.add(1, 'days');
+                        this.currentDate = d;
+                        break;            
+                    case 3 : // Date & time for a week day and time
+                        let day = cmd[1].toLowerCase();
+                        let weekDay = daysOfWeek_short[ 'fr'].indexOf( day);
+                        let weekDayL = 'fr';
+                        if ( weekDay == -1) {
+                            weekDay = daysOfWeek_short[ 'en'].indexOf( day);
+                            weekDayL = 'en';
+                        }
+                        if ( weekDay == -1) {
+                            d = 0;
+                            break;
+                        }                        
+                        let hours = parseInt( cmd[2]);
+                        let minutes = ( typeof cmd[3] == 'string') ? parseInt( cmd[3]) : 0;
+                        if ( this.currentWeek > 0) d = startOfWeek( this.currentWeek);
+                        if ( this.dayjs.locale() == "en" && weekDayL == "fr") d = d.add( 1, 'days');
+                        // console.log( d.format() + ' ' + dayjs.locale());
+                        d = d.add( weekDay, 'days').add( hours, 'hours').add( minutes, 'minutes');
+                        if ( future && d.isBefore( dayjs())) {
+                            d = 0;
+                            break;
+                        }
+                        this.currentDate = d;                        
+                        break;
+                    case 4 : // Add days
+                        d = d.add( parseInt( cmd[1]), 'days');                        
+                        break;
+                    case 5 : // Add hours
+                        d = d.add( parseInt( cmd[1]), 'hours');                        
+                        break;
+                    case 6 : case 7 : // At a specif time
+                        let t = cmd[1] + 'h' + (( typeof cmd[2] != "undefined" && cmd[2]) ? cmd[2] : "00");
+                        let d2 = dayjs( t, 'h:mm'); // today at requested hour
+                        if ( d.isBefore( d2)) d = d2; // send today at requested time
+                        else if ( future) {
+                            d = 0;
+                            break;
+                        } else d = d2.add( 1, 'days'); // send tomorrow at requested time
+                        this.currentDate = d;
+                        break;                    
+                    case 8 : // Date at start of a week of the year    
+                        let targetWeek = parseInt( cmd[1]);                   
+                        this.currentWeek = targetWeek;
+                        this.currentDate = startOfWeek( targetWeek);
+                        break;
+                    case 9 : // Full date
+                        d = dayjs( new Date( cmd[3], cmd[2], cmd[1], cmd[4], cmd[5]));
+                        this.currentDate = d;
+                        break;
+                    case 10 : // Clear
+                        this.currentDate = null;   
+                        break;
+                }
+            } else {
+                d = 0;
+            }
+        //console.log( d);
+            if ( !formatOut) formatOut = 'DD/MM/YYYY';
+            val = (d) ? d.format( formatOut) : d;
             return val;
         } else if ( formatOut) {
             // Converting from 1 format to another
@@ -720,7 +862,16 @@
             return r;
         } else {
             // If nb assume UNIX time and convert to time from now
-            return val.fromNow();
+            if ( !isNaN( expr)) {
+                // Ever come here ?
+                console.log( 'date expr is Number :' + expr);
+                val = dayjs.unix( expr);
+                return val.fromNow();
+            } else {
+                // Date OK
+                this.currentDate = val;
+                return val;
+            }
         }
       
     } // UDEcalc.datestr()
@@ -832,11 +983,12 @@
     * @apiGroup Text or HTML
     *    
     */ 
-    linkTag( url, alt, text)
+    linkTag( urlOrAction, alt, text)
     {
         // return anchor tag
         let anchor = document.createElement("a");
-        anchor.href = url;
+        if ( urlOrAction.indexOf( '/') > -1) anchor.href = urlOrAction;
+        else $$$.dom.attr( anchor, 'onclick', urlOrAction.replace( '&quot;', '"'));
         //anchor.alt = alt;
         anchor.target=alt;
         // anchor.setAttribute( 'contenteditable', "false");
@@ -917,7 +1069,7 @@
     */     
   /**
     * Return an switch-controled checkbox
-    * @param {string} bind Path to variable (domValue)
+    * @param {string} bind Path to variable (domValue) .. could be attr name
     * @param {string} model For future use
     * @param {string} alt Rollover text (future use)
     * @return {string} The &lt;input&gt; tag
@@ -938,7 +1090,7 @@
         let styles = this.eval( "classesByTag( 'span.' + switchClass);");
         if ( styles.indexOf( "ERR") > -1) { 
             let me = this;
-            setTimeout( function() { me.switchTag( bind, switchClass, text);}, 500);
+            // !!! setTimeout( function() { me.switchTag( bind, switchClass, text);}, 500);
         } else if ( !styles) {
             let cssSelector = "span."+switchClass;
             styles = "";
@@ -1031,7 +1183,52 @@
         // Return complete tag
         return tag;
     } // selectorTag()
+
+   /**
+    * Return the value of a selected radio button
+    * @param {mixed} elementOrId The element containing a set of radio buttons
+    * @return {string} The value field of the selected element or null if not found
+    */
+    getSingleChoice( elementOrId) {
+        let value = null;
+        let element = this.dom.element( elementOrId);
+        if ( !element) return null;
+        let choices = this.dom.elements( 'input[ type="radio"]', element);
+        if ( choices.length == 0) choices = this.dom.elements( 'option', element);
+        for ( let choicei=0; choicei<choices.length; choicei++) {
+            let choice = choices[ choicei];
+            if ( choice.checked || choice.selected) {
+                value = choice.value;
+                break;
+            }
+        }
+        return value;
+    }
+
+   /**
+    * Return selected values of a set of checkboxes or select control as a CSV string 
+    * @param {mixed} elementOrId The element containing a set of radio buttons
+    * @return {string} The value field of the selected element or null if not found
+    */
+    getMultipleChoices( elementOrId) {
+        let value = [];
+        let element = this.dom.element( elementOrId);
+        if ( !element) return null;
+        if ( this.dom.attr( element, 'exTag') == "fieldset") {
+            let choices = this.dom.elements( 'input[ type="checkbox"]', element);
+            if ( choices.length == 0) choices = this.dom.elements( 'option', element);
+            for ( let choicei=0; choicei<choices.length; choicei++) {
+                let choice = choices[ choicei];
+                if ( choice.checked || choice.selected) {
+                    value.push( choice.value);
+                }
+            }
+        }    
+        return value.join( ',');
+    }
     
+
+
    /**
     * @api {formula}metricTag( type, id, value, params) Return a mini SVG graph display of a value
     * @apiParam {string} type type of display
@@ -1177,17 +1374,25 @@
             lines = htmledit.split( "\n");
         }    
         // Remove 1st line
-        let firstLine = lines.shift();
+        let firstLine = lines.shift().trim().toLowerCase();
         let txt = "";
-        if ( ["linetext", "css", "js", "json", "html"].indexOf( firstLine.toLowerCase()) == -1) {
+        if ( ["linetext", "css", "js", "json", "html"].indexOf( firstLine) == -1) {
             txt += firstLine = "\n";
         } 
-        if (firstLine.trim().toLowerCase() != "html") { txt += lines.join("\n");}
+        if (firstLine != "html") { txt += lines.join("\n");}
         else {
-            // Concatene editable content without \n 
+            // Concatene editable content without \n except for style and script sections and substitue empty lines with break
+            let scriptOrStyle = false;
             for (let linei in lines) {
                 let line = lines[ linei].trim();
-                if ( !line) { line="<br />";}
+                // Remove escaped quotes
+                line = line.replace( /\\\"/g, '"');
+                // Detect style and script open and close tags to add \n for lines inside these tags
+                if ( line.indexOf( '<style') > -1 || line.indexOf( '<style') > -1) scriptOrStyle = true;
+                else if ( line.indexOf( '</style') > -1 || line.indexOf( '</style') > -1) scriptOrStyle = false;
+                // Handle lines according to wether they are styles or script or not
+                if ( scriptOrStyle) line +="\n";
+                else if ( !line) { line="<br />";}
                 txt += line;
             }
         }
@@ -1642,6 +1847,26 @@
     */
     textReplace( search, replace, source) { return source.replace( search, replace);}
 
+  /**
+    * @api {Formula} attrPath(elementOrId,attr) Returns path to an element's attribute
+    * @apiParam {mixed} elementOrId The id of an element
+    * @apiParams {string attr Name of an atribue
+    * @apiSuccess {string} Value path to attribute ( id...attr)
+    * @apiGroup Formulas
+    */
+    attrPath( selector, attr) { 
+        let element = doOnload( "$$$.dom.element(" + selector + ");");
+        if ( !element) { console.log( selector); return "";}
+        if ( !element.id) {
+            if ( this.dom.attr( element, 'name')) {
+                element.id = this.dom.attr( element, 'name');
+            } else {
+                element.id = $$$.getName( element, true);
+                this.dom.attr( element, 'name', element.id);
+            }
+        }    
+        return element.id + "..." + attr;
+    }
     
 } // class js UDEcalc
 
@@ -1653,6 +1878,8 @@ if ( typeof process == 'object')
     if ( typeof global.JSDOM == "undefined" && typeof window == "undefined") {
         console.log( 'Syntax : OK');
         const envMod = require( '../tests/testenv.js');
+        // console.log( envMod);
+        requirejs = envMod.require;
         envMod.load();        
         if ( typeof window == "object") window.UDEcalc = UDEcalc; 
         else window = {};    
@@ -1690,6 +1917,41 @@ if ( typeof process == 'object')
             let w = [ 12.235466, "abc", 55, 623.3333333];
             let r = calc.uround( w, 2);
             testResult( test, w[0] == 12.24, r);
+        }
+        {
+            test = "9 datestr";     
+            let expr = "demain";    
+            let r = calc.datestr( expr);
+            console.log( expr, r);
+            testResult( test, r.indexOf( '20') > -1, r);
+        }
+        {
+            test = "10 datestr";     
+            let expr = "+3j";  // after 'demain' so 4 days from today        
+            let r = calc.datestr( expr);
+            console.log( expr, r);
+            testResult( test, r.indexOf( '20') > -1, r);
+        }
+        {
+            test = "11 datestr working with week of year";     
+            let expr = "semaine 21";       
+            let r = calc.datestr( expr);
+            let r2 = calc.datestr( 'Marpr 10h30','',"YYYY-MM-DDTHH:mm:00");
+            // console.log( expr, r, r2);
+            let r3 = calc.datestr( 'jEnpr 10h30','',"YYYY-MM-DDTHH:mm:00");
+            testResult( test, (r2  && r2.indexOf( '05') > -1 &&  !r3), r2 + ' ' + r3);
+        }
+        {
+            test = "12 datestr with full date";     
+            let expr = "24/05/2024 10h15";       
+            let r = calc.datestr( expr, '',"YYYY-MM-DDTHH:mm:00");
+            testResult( test, r.indexOf( '05') > -1, r);
+        }
+        {
+            test = "13 datestr with just time";     
+            let expr = "10h15";       
+            let r = calc.datestr( expr, '',"YYYY-MM-DDTHH:mm:00");
+            testResult( test, r.indexOf( '10:15') > -1, r);
         }
         console.log( "Program's trace checksum: "+debug( "__CHECKSUM__"));    
         console.log( 'Test completed');

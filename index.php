@@ -1,6 +1,8 @@
 <?php
 
-function LF_fileServer() {
+L_fileServer();
+
+function L_fileServer() {
     $uri = $_SERVER[ 'REQUEST_URI'];
     if ( substr( $uri, 0 ,2) == "/?") return false;
     $uriParts = explode( '/', $uri);
@@ -22,19 +24,27 @@ function LF_fileServer() {
         array_shift( $uriParts); // smartdoc
         $path = implode( '/', $uriParts);
     }
-    return LF_sendFile( $path, $ext);
+    return L_sendFile( $path, $ext);
 }
 
-function LF_sendFile( $path, $ext) { 
+function L_sendFile( $path, $ext) { 
+    $fileContents = "";
     // Filename processing
     if ( $ext == "js" && ($p1 = strpos( $path, "-v-"))) {
         // Remove version from JS files
         $p2 = strpos( $path, ".", $p1);
         $path = substr( $path, 0, $p1).substr( $path, $p2);
     } 
-    if ( file_exists( $path)) {    
-        // File read
-        $fileContents = file_get_contents( $path);
+    // Send empty files if included in core
+    $pathParts = explode( '/', $path);
+    $filename = $pathParts[ count( $pathParts) - 1];
+    if ( file_exists( "/app/modules-autoload/{$filename}")) {
+        $fileContents = "// Already in core";
+    }
+    // Read file
+    if ( !$fileContents && file_exists( $path)) $fileContents = file_get_contents( $path);
+    // Send file
+    if ( $fileContents) {    
         // Set header
         switch ($ext) {
             case "jpg"  :
@@ -88,8 +98,6 @@ function LF_sendFile( $path, $ext) {
             header('Content-Disposition: attachment; filename="' .$requestedFile. '"');
             break;
         }        
-        /*if (!$fileContents)  header("Content-Length: ". filesize($path.$oid_str));
-        else*/ 
         header("Content-Length: ". strlen($fileContents));
         //header("Last-Modified: ".gmdate('D, d M Y H:i:s \G\M\T', time() + 3600));
         /*
@@ -114,27 +122,10 @@ function LF_sendFile( $path, $ext) {
             header("Pragma:");
             header("Expires: ".gmdate('D, d M Y H:i:s \G\M\T', time() + $life));
         }
-
-        // f. - send file contents
-        // echo $path.$oid_str.' '.$ext;die();
-        /*if (!$fileContents) {	
-            // Get direct from file
-            $file = fopen($path.$oid_str, "r");
-            if ($file) 
-            {
-                while (!feof($file)) {
-                    $c = fread($file, 10000);
-                    echo $c;
-                    flush();
-                }
-            }
-        } else*/ { 
-            // Use buffer
-            echo $fileContents;
-            flush();
-        }          
-        return true;
+        echo $fileContents;
+        flush();
+    } else {
+        echo "var error = 'No file ".$path."';"; 
     }
-    echo "var error = 'No file ".$path."';"; return true;
-    return false;
+    return true;
 }

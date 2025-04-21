@@ -75,7 +75,7 @@ class DOMvalue {
            // 3 elements = ??
         
         }
-        // Decide wether firts character of index2 designates value type
+        // Decide wether first character of index2 designates value type
         this.useFirstCharAsType = true;
         if ( path[2].substring( 0, 1) == "!") { 
             this.useFirstCharAsType = false;
@@ -106,6 +106,19 @@ class DOMvalue {
         }
     
         // Look for child element if indexes provided 
+        if ( path[1][0] == '-' || path[1][0] == '+') {
+          // Offset from current 
+          if ( target.tagName == "TABLE") {
+              let currentCell = (this.dom.autoHome) ? this.dom.autoHome : this.cursor.HTMLelement;
+              let currentRow = currentCell.parentNode;
+              let rows = target.tBodies[0].rows;
+              let rowIndex = -1;
+              for ( rowIndex=0; rowIndex < rows.length; rowIndex++) {
+                if ( rows[ rowIndex] == currentRow) break;
+              }             
+              path[1] = "" + ( parseInt( path[1]) + rowIndex + 1); 
+          }
+        }
         if ( path[1] || path[2]) target = this.findChild( target, path[1], path[2]);
         if (!target) { debug( {level:8}, "can't find child (path)", path); return "N/A";}
 

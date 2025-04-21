@@ -16,7 +16,7 @@ class UDE_layout {
         this.ud = ude.dataSource;
         // Add API ftcs
         if ( API) { API.addFunctions( this, [ 
-            "paginate", "checkPagination"
+            "paginate", "checkPagination"/*, "buildDefaultViewHeader"*/
         ]);}        
     }
     
@@ -69,7 +69,7 @@ class UDE_layout {
                 let elWidth = element.getBoundingClientRect().width;
                 let elLeft = element.offsetLeft;
                 //if ( (elLeft + elwidth) < pageWidth) continue;
-                //console.log( "zone widths : page, el, left", pageWidth, elWidth, elLeft);
+                console.log( "zone widths : page, el, left", pageWidth, elWidth, elLeft);
                 // Avoid looping on elements that are bigger than page    
                 if ( elHeight > pageHeight) elHeight = pageHeight -10;
                 // Detect elements that need to change page
@@ -141,12 +141,38 @@ class UDE_layout {
     } // UDE_layout.addPage()
     
     moveToNextPage( element, page, position) {
+        let cursor = this.dom.cursor.fetch();
+        let selector = '';
+        let textElIndex = -1;
+        if ( cursor && element.contains( cursor.HTMLelement)) {
+            selector = this.dom.getSelector( cursor.HTMLelement);
+            textElIndex = Array.prototype.indexOf.call( cursor.HTMLelement.childNodes, cursor.textElement);
+        } else cursor = null;
         let before = page.childNodes[ position];
-        if ( before)  page.insertBefore( element, before); else page.appendChild( element);
+        let newElement = ( before) ? page.insertBefore( element, before) : page.appendChild( element);
+        if ( cursor) {
+            cursor.HTMLelement = doOnload( "$$$.dom.element(" + selector + ");"); // 2DO a fct 
+            cursor.textElement = cursor.HTMLelement.childNodes[ textElIndex];
+            this.dom.cursor.set();
+            this.dom.makeVisible( cursor.HTMLelement);
+        }
     }
     
     moveToPreviousPage( element, page, position) {
+        let cursor = this.dom.cursor.fetch();
+        let selector = '';
+        let textElIndex = -1;
+        if ( cursor && element.contains( cursor.HTMLelement)) {
+            selector = this.dom.getSelector( cursor.HTMLelement);
+            textElIndex = Array.prototype.indexOf.call( cursor.HTMLelement.childNodes, cursor.textElement);
+        } else cursor = null;
         page.appendChild( element);
+        if ( cursor) {
+            cursor.HTMLelement = doOnload( "$$$.dom.element(" + selector + ");"); // 2DO a fct 
+            cursor.textElement = cursor.HTMLelement.childNodes[ textElIndex];
+            this.dom.cursor.set();
+            this.dom.makeVisible( cursor.HTMLelement);
+        }
     }
     
     checkPagination( elementOrId) {
@@ -167,8 +193,55 @@ class UDE_layout {
             this.paginate( API.getView( element));
         }
     } // UDE_layout.checkHeight()
+/* works but moved to resources/system/udesttausProgress
+    buildDefaultViewHeader( viewName) {
+        let view = this.dom.elementByName( viewName);
+        if ( !view) return false;
+        // Check for existing header
+        let header = this.dom.element( 'div.view-header', view);
+        if ( !header) {
+            // Insert div before any other children
+            header = this.dom.insertElement( 'div', "", { class:'view-header'}, view.childNodes[0]);
+        }
+        // Fill header
+        if ( !this.dom.children( header).length) {
+            // Empty header so lets fill it
+            let progress = $$$.getUDparam( 'progress');
+            let title = viewName;
+            let actions = [];
+            // Progress bar
+            let viewsParams = $$$.getUDparam( 'view-progress');
+            let viewParams = ( viewsParams) ? viewsParams[ viewName] : null;
+            // Add header if progress info for this view is available
+            if ( viewParams) {
+                let stepProgress = [ viewParams[ 'progress-start'], viewParams[ 'progress-end']];
+                let progressSVG = $$$.getProgressSVG( viewParams.step, viewsParams, progress);
+                header.appendChild( progressSVG);
+                // 2DO add progress to header
+                title = viewParams.title;
+                actions = viewParams.actions;            
+                // Title
+                // 2DO insert h1 with title
+                this.dom.insertElement( 'h1', title, {}, header, false, true);
+                // Actions
+                for ( let acti=0; acti < actions.length; acti++) {
+                    let action = actions[ acti];
+                    // 2DO display button
+                }
+                // Seperator        
+                // 2DO insert line or hr
+                this.dom.insertElement( 'hr', '', { style:"background-color:black;"}, header, false, true);
+            }
+        }
 
-} // End of JS class UDE_pager 
+    }
+    */
+
+    toggleViewHeader() {
+
+    }
+
+} // End of JS class UDE_layout 
 if ( typeof process != 'object') {
     // window.UDE_layoutInstance = new UDE_layout( )
 } else {

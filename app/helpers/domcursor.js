@@ -81,8 +81,8 @@ class DOM_cursor {
         }
 		// Check element with saveable is saveable 
 		let saveable = this.parent.getSaveableParent( element);
-        let view = this.parent.getView( element);
-        if ( !saveable && this.parent.attr( view, 'name') != "App") return this;
+        let view = (saveable) ? this.parent.getView( element) : null;
+        if ( !saveable && ( !view || this.parent.attr( view, 'name') != "App")) return this;
         if (saveable) {
         /*
             * Only keep track of cursor in UD's document element and certain tags
@@ -91,10 +91,10 @@ class DOM_cursor {
             // Get extended tag of saveable and decide if all element tags are accepted
             let exTag = this.parent.attr( saveable, 'exTag');
             let controlTags = true;
-            if ( [ 'div.zoneToFill', 'div.filledZone'].indexOf( exTag) > -1) controlTags = false;
+            if ( [ 'div.html', 'div.zoneToFill', 'div.filledZone'].indexOf( exTag) > -1) controlTags = false;
             // Walk up DOM till id='document' checking elements have id 
             let walk = element;
-            let safe = 20;
+            let safe = 30;
             while ( walk && ( !walk.id || walk.id != "document") && safe--) {
                 if (walk == saveable) controlTags = false;
                 if ( controlTags && !walk.id && this.noIdTags.indexOf( walk.tagName.toLowerCase()) == -1) return this;
@@ -192,7 +192,7 @@ class DOM_cursor {
   } // DOM_cursor.fetch()
     
    /**
-    * Set cursor
+    * Set cursor in browser
     * @api {JS} dom.cursor.set()
 	* @apiGroup Cursor
     */	
@@ -238,7 +238,28 @@ class DOM_cursor {
             range.setStart( this.textElement, this.textOffset);
             // range.setEnd( this.textElement, this.textOffset);
             range.collapse( true);
-            sel.addRange( range);   
+            sel.addRange( range);
+            // Make element visible withing saveable element
+            switch ( this.HTMLelement.tagName.toLowerCase()) {
+                case 'li' : 
+                    let li = this.HTMLelement;
+                    let list = li.parentNode;
+                    let scroll = this.dom.element( 'scroll');
+                    let scrollHeight = this.dom.attr( scroll, 'computed_height');
+                    if (  (list.offsetTop - scroll.scrollTop + list.offsetHeight) >= scrollHeight) {
+                        // List is not completely visible
+                        scroll.scrollTop = list.offsetTop - ( scrollHeight - list.offsetHeight - 100)/2;    
+                    } 
+                    if ( list.offsetHeight < list.scrollHeight ) {
+                        // Scrollable list use element's scroll
+                        if ( li.offsetTop > ( list.scrollTop + list.offsetHeight)) {
+                            list.scrollTop = li.offsetTop - 50;
+                        }
+                    }
+                    break;
+                // case 'td'    
+            }
+            
         }       
     }
   } // DOM_cursor.set()
@@ -294,7 +315,16 @@ class DOM_cursor {
         } else { this.set();}
         return this;
     } // DOM_cursor.setAt()
+
+    /**
+     * 2DO $$$ function calls
+     */
   
+    /**
+     * Save cursor for ulterieur restoration using DOM selector to be independnat of DOM object changes
+     * @param {*} index 
+     * @returns 
+     */
   save( index=-1) {
     if ( !this.HTMLelement || this.HTMLelement.nodeType != Node.ELEMENT_NODE) return -1;
     if ( index == "") index = -1;
@@ -357,10 +387,10 @@ class DOM_cursor {
     return true;
   } // DOM_cursor.restore()
   
-    savedCursorAsString( n) {
-        let saved = this.savedValues[ n - 1];
-        return JSON.stringify( saved);
-    }
+savedCursorAsString( n) {
+    let saved = this.savedValues[ n - 1];
+    return JSON.stringify( saved);
+}
   
   
   setCurrentCursorPosition(chars) 

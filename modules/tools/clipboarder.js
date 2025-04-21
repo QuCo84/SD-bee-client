@@ -53,7 +53,7 @@
         rules += "div.CLIPBOARD_clip { display:inline-grid; padding:2%; margin:2%; text-align:center; height:80px; overflow-x:hidden; overflow-y:hidden; transform: scale(0.8); cursor:pointer;}\n"; // 2DO add grab
         rules += "div.CLIPBOARD_options{padding: 2%; margin: 2%;  text-align:left; font-size:0.8em; overflow:hidden; }\n";
         rules += "div.CLIPBOARD_options label input{vertical-align:middle;}\n";
-        rules += "span#ClipboardPasteZone, div.Dropzone{height: 50px; width: 100%; cursor:crosshair; background-color: #e6ddba;}\n";
+        rules += "span#ClipboardPasteZone, div.Dropzone{ width: 100%; cursor:crosshair; background-color: #e6ddba;}\n"; // height: 50px; 24/04/23
         rules += "div.CLIPBOARD_clip img.CLIPBOARD{ width:auto; height:50px;}\n";
         rules += "div.CLIPBOARD_clip div.cb_tags{ font-size:0.8em; text-align:left; display:inline-block;}\n";
         this.ud.addStyleRules( rules);
@@ -607,7 +607,7 @@
                 }                
             } else{ events.push( { event: "paste", type:"paste", data:clipObj.content});}
         } else if (useAs == "html") { 
-            events.push( { event: "paste", type:"paste", data:clipObj.content.replace( 'class="CLIPBOARD"', '')});
+            events.push( { event: "paste", type:"paste", data:clipObj.content}); //.replace( 'class="CLIPBOARD"', '')});
         }
         // Add endPaste event 
         if ( events.length) { events.push( { event: "endPaste", type: "endPaste"});}

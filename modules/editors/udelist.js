@@ -22,7 +22,10 @@
         this.ude = ude;
         if ( typeof API != "undefined" && API) API.addFunctions( 
             this, 
-            [ 'getItem', 'getItems', 'getMatchingItems', 'getFirstMatchingItem', 'insertItem', 'emptyList', 'fillListFromTable']
+            [ 
+                'getItem', 'getItems', 'getMatchingItems', 'getFirstMatchingItem', 'insertItem', 'emptyList', 'fillListFromTable',
+                'getFirstMatchingItemIndex', 'updateItemInList', 'insertItemInList', 'deleteItemFromList', 'fillListFromArray',
+            ]
         );
     } // UDElist.construct()
     
@@ -37,13 +40,12 @@
     update( id, recurrent = false)
     {
         // Get list
-        var list = document.getElementById( id);
+        let list = document.getElementById( id);
         // if !table initialise
         // Get list's source if provided
-        var dataSource = "";
-        if ( list.getAttribute( "datasrc")) dataSource = list.getAttribute( "datasrc");
+        let dataSource = this.dom.attr( list, "ude_datasrc");
         // Loop through items
-        var items = list.childNodes;
+        let items = list.childNodes;
         for (var i=0; i < items.length; i++)
         {
             var item = items[i];
@@ -56,7 +58,7 @@
             }
             if ( item.textContent.charAt(0) == "=")
             {
-                item.setAttribute( "ude_formula", item.textContent.substr(1));
+                item.setAttribute( "ude_formula", item.textContent.substring(1, item.textContent.length-1));
                 item.textContent = "...";
             }
             // Compute formula if present
@@ -127,7 +129,7 @@
         // Build edit zone and append to element
         if (json) {            
             // 2DO add element's styles to JSON
-            let editZone = this.dom.JSONput( json, bind);
+            let editZone = this.dom.JSONput( json, bind, "", this.dom.keepPermanentClasses( element.className, true));
             element.appendChild( editZone);
         }
     } // UDElist.initialize()
@@ -142,12 +144,11 @@
         let name = suggestedName.replace(/ /g, '_').replace(/'/g,'_').replace(/"/g, '');
         let objectName = name + "_object";
         // Data
+        // 2DO Get default value from register
         let objectData = { 
             meta:{ type:"list", name:name, zone:name+"editZone", caption:suggestedName, captionPosition:"top"}, 
-            data:{ tag:"ul", name:name, class:"listStyle1", value:{ 
-                0:{ tag:"li", class:"itemModel", placeholder:"Enter item", value:"Enter item"},
-                1:{ tag:"li", placeholder:"Enter item", value:"Enter item"}
-            }},
+            data:{ tag:"jsonlist", name:name, class:"listStyle1", value:[ "Enter item", "Enter Item"] 
+            },
             changes: []
         };
         // Create object div and append to element
@@ -266,7 +267,7 @@
                     // Insert a new item
                     // Look for model
                     let modelItem = (items.length) ? items[ 0] : null;
-                    let modelItemContent = "...";
+                    let modelItemContent = this.dom.udjson.value( UD_defaultContentByExTag, "li");  // "...";
                     let modelItemFormula = "";
                     if ( modelItem && modelItem.classList.contains( 'itemModel')) {
                         // 2DO set ude_place by looping through children
@@ -285,20 +286,25 @@
                 // event was processed
                 processed = true;
                 break;
-            case "save" :
-                processed = this.prepareToSave( element, e.target);
+            case "save" :            
+                if ( typeof e.target != "undefined") processed = this.prepareToSave( element, e.target);
                 break;
             case "merge up" :
             case "merge down" :
                 if ( source.tagName != "LI") { processed = true; break;}            
                 if ( index > 0 && event == "merge up") {
-                    items[  index - 1].innerHTML += source.innerHTML;
+                    let item = items[  index - 1];
+                    let pos = item.textContent.length;
+                    item.innerHTML += source.innerHTML;
                     source.remove();
-                    this.dom.cursor.setAt( items[  index - 1], 999);
+                    items = listElement.childNodes;
+                    this.dom.cursor.setAt( items[  index - 1], pos);
                 } else if ( event == "merge down" && index < items.length) {
+                    let pos = source.textContent.length;
                     items[  index + 1].innerHTML = source.innerHTML + items[  index + 1].innerHTML;
                     source.remove();  
-                    this.dom.cursor.setAt( items[  index + 1], source.textContent.length);                    
+                    items = listElement.childNodes;
+                    this.dom.cursor.setAt( items[ index], pos);                    
                 }
                 // Save change
                 this.ude.setChanged( listElement);
@@ -326,16 +332,26 @@
                     if ( this.dom.hasDefaultContent( element) || !element.textContent) { 
                         // Replace empty item completely
                         element.textContent = workDiv.textContent; // !!! why not innerHTML ?
+                        // Place cursor at end of current item
+                        this.dom.cursor.setAt( element, 10000);
+                        // Remove initialContent
+                        element.classList.remove( 'initialcontent');
+                    /*
+                    } else if ( this.dom.cursor.selectionInNode) {
+                        // Replace selected text with pasted text
+                        $$$.insertTextAtCursor( workDiv.textContent);
+                    */
                     } else if ( this.dom.cursor.textOffset < ( this.dom.cursor.textElement.textContent.length - 1)) {
-                        // Add data to current item
+                        // Cursor between start and penultimate character - insert at cursor, and  move cursor to end of insert
                         $$$.insertTextAtCursor( workDiv.textContent);
                     } else { 
-                        // Insert a new item after current one
+                        // Cursor at end of an item - create a new item after current one and set as current item
                         let index = this.dom.siblings( element).indexOf( this.dom.cursor.HTMLelement);
-                        if ( index > -1) this.insertItem( element.id, index, workDiv.textContent);
+                        if ( index > -1) element = this.insertItem( element.id, index, workDiv.textContent);
+                        // Place cursor at end of new item
+                        this.dom.cursor.setAt( element, 10000);
                     }
-                    // Place cursor at end of current item
-                    this.dom.cursor.setAt( element, 10000);
+                    
                     processed = true;
                 }
                 API.setChanged( element);
@@ -421,6 +437,14 @@
 		let exTag = this.dom.attr( element, "exTag");
 		if (  exTag == "div.list") element = this.dom.element( "ul", element); //element.getElementsByTagName( "ul")[0];
 		else if ( exTag != "ul" && exTag != "ol") return debug( {level:1, return:null}, "Not a list element");
+        // Detect content to be used as placeholder
+        let placeholder = false;
+        if ( data.indexOf( '*') === 0) {
+            // Inserted text beginning with * means use as placeholder
+            data = data.substring(1);
+            placeholder = true;
+        }
+        // Create new item
 		let newItem = null;
         let items = this.dom.children( element);
         if ( index > -1) {
@@ -430,12 +454,12 @@
             if ( index > items.length) index = items.length-1;
             insertAfter = items[ index]; 
 			newItem = this.dom.insertElement( 'li', data, {}, insertAfter, true);
-            this.dom.attr( newItem, 'ude_place', newItem.textContent);
+            if ( placeholder) this.dom.attr( newItem, 'ude_place', newItem.textContent);
         } else  {
             // Insert at end of list
-            if ( items.length)  newItem =  this.dom.insertElement( 'li', data, { ude_place:"..."}, items[ items.length -1], false);
+            if ( items.length)  newItem =  this.dom.insertElement( 'li', data, { ude_place:"..."}, items[ items.length -1], true);
             else newItem =  this.dom.insertElement( 'li', data, { ude_place:"..."}, element, false, true);
-            this.dom.attr( newItem, 'ude_place', newItem.textContent);
+            if ( placeholder) this.dom.attr( newItem, 'ude_place', newItem.textContent);
         }
         this.ude.calc.updateElement( newItem);
         return newItem;
@@ -486,7 +510,29 @@
             $$$.insertItem( targetId, -1, listContent);
         }
     }    
-     
+    
+    /**
+    * Fill a list with contents from an array  
+    * @param {*} tableName 
+    * @param {*} columnName 
+    * @param {*} targetName 
+    */ 
+    fillListFromArray( data, targetName, defaultOnly = true) {
+        let container = this.dom.elementByName( targetName);
+        let target = this.dom.element( targetName);
+        if ( typeof data == "undefined" || !data || !target || !container) return;
+        if ( defaultOnly && !container.classList.contains( 'initialcontent')) return;
+        this.emptyList( target);
+        for ( let datai=0; datai < data.length; datai++) {
+            let listContent = data[ datai];
+            if ( listContent) this.insertItem( targetName, -1, listContent);
+        }
+        if ( defaultOnly) {
+            container.classList.remove( 'initialcontent');
+            target.classList.remove( 'initialcontent');
+        }
+    }    
+
     /* * 
      *  CALCULATOR & API PART - Methods for running calculator functions on a list
      */
@@ -509,7 +555,8 @@
     matchItem( item, expr)
     {
         // RegEx match
-        if ( expr == "" || item.textContent.match( expr)) return true;
+        let c = item.textContent + '/';
+        if ( expr == "" || c.match( expr)) return true;
         return false;
     } //UDElist.matchItem()
    /*
@@ -581,6 +628,27 @@
            if ( this.matchItem( items[i], selector)) r.push( items[ i].textContent);
         return r;
     } // UDElist.findItems()
+
+    /**
+    * @api Return index of first item to match an expression
+    * @apiParam {string} listId Id of HTML list
+    * @apiParam {string} selector Regular expression to match items
+    * @apiSuccess {[number]} Index (1 - n) of matching item or false if no match
+    * @apiGroup Elements
+    */
+    getFirstMatchingItemIndex( listId, selector="")
+    {
+        let r=[];
+        // Get list
+        let list = document.getElementById( listId);
+        if ( list.tagName.toLowerCase() != "ul") list = list.getElementsByTagName('ul')[0];
+        if (!list) return debug( {level:1, return:"ERR: no list "+id}, "No list", id);        
+        // Get items
+        var items = list.getElementsByTagName( 'li');
+        for (var i=0; i < items.length; i++) 
+           if ( this.matchItem( items[i], selector)) return i+1;
+        return false;
+    } 
  
 
   /**  
@@ -603,6 +671,27 @@
         if (w) return w[0];
         else return -1;
     } // UDE.findFirstItem()   
+
+     /*
+    * @api {js} updateItemInList(listId,index,value) 
+    * @apiParam {string} item The &lt;LI&gt; element
+    * @apiParam {string} index The item no (starting at 1)
+    * @apiParam {string} value Text context of item
+    * @apiSuccess {string} Item content
+    * @apiGroup Elements
+    */
+    updateItemInList( listId, index, value) {
+        // Get list
+        let list = document.getElementById( listId);
+        if ( list.tagName.toLowerCase() != "ul") list = list.getElementsByTagName('ul')[0];
+        if (!list) return debug( {level:1, return:null}, "No list", id);        
+        // Get items
+        let items = list.getElementsByTagName( 'li');
+        if ( index <= 0 || index > items.length) return debug( {level:1, return:null}, "Bad index", index, items);  
+        // Write item
+        items[ index - 1].textContent = value;
+        return value;
+    }
     
    /**
 	* Insert a new item into a list.
@@ -677,8 +766,8 @@ if ( typeof process != 'object') {
         // Test 1 - JSON list
         {
             // Create object div.listObject and append to element            
+            name = "mylist";
             // Data
-            name = "myList";
             let objectData = { 
                 meta:{ type:"list", name:name, zone:name+"editZone", caption:"test list", captionPosition:"top"}, 
                 data:{ tag:"ul", name:name, class:"listStyle1", value:{ 0:{ tag:"li", value:"item 1"}, 1:{ tag:"li", value:"item 2"}}},
@@ -702,7 +791,6 @@ if ( typeof process != 'object') {
         {
             // Create list with HTML            
             // Data
-            name = "myList";
             let objectData = '<span>My List 2 <span class="objectName">myList2></span></span>';
             objectData += '<ul id="myList2" class="listStyle1"><li>Item 1</li><li>Item 2</li></ul>';            
             // Create container div.list
@@ -720,11 +808,10 @@ if ( typeof process != 'object') {
         {
             // Create list with text           
             // Data
-            name = "myList";
             let objectData = 'My List 3';          
             // Create container div.list
             let listId = "B010000000900000M";            
-            let listAttributes = {id:listId, class:"list", ud_mime:"text/json"};
+            let listAttributes = {id:listId, class:"list initialcontent", ud_mime:"text/json", name:"mylist2"};
             let listElement = listEditor.dom.prepareToInsert( 'div', objectData, listAttributes);
             // Append list to view
             view.appendChild( listElement);   
@@ -733,6 +820,18 @@ if ( typeof process != 'object') {
             testResult( "3 - list creation direct insert",  ude.dom.element( listId), view.innerHTML);
         }        
         
+         // Test 4 - Fill from array
+         {
+            // Create list with text           
+            // Data
+            let data = [ 'itemzz 1', 'Itemzz 2','Itemzz 3'];          
+            // Create container div.list
+            let listName = "mylist2";         
+            listEditor.fillListFromArray( data, listName);
+            let list = ude.dom.element( listName).innerHTML;
+            testResult( "4 - fill from array",  list.indexOf( 'Itemzz 2') > -1, list);
+        }        
+
         console.log( 'Test completed');
         process.exit();
     } else {

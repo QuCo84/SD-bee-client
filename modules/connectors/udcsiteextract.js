@@ -22,11 +22,9 @@
     
     constructor( parent) {
         // 2DO doen't need UDE as API used systematically for access to dom and other fcts
-        if ( parent) {
-            this.parent = parent;
-            window.udc_siteextract = this;
-        }
-        if ( typeof API != "undefined") API.addFunctions( this, [ 'siteExtractConfig',]);
+        if ( parent) this.parent = parent;
+        window.udc_siteextract = this;
+        if ( typeof API != "undefined") API.addFunctions( this, [ 'siteExtractConfig']);
         debug( {level:5}, "UDC_siteExtract constructor");
     }
     
@@ -44,9 +42,17 @@
     
     buildConfigZone( name) {
         debug( {level:5}, "UDC_siteExtract buildConfigZone");        
-        // Parse current parameters to build dataByElement        
-        let paramHolder = API.dom.element( name+"_parameters");
-        let params = API.udjson.parse( paramHolder.textContent);
+        // lookfor JSON100 object
+        let json = $$$.dom.udjson.parse( name + '_object');
+        let params = null;
+        if ( json) {
+            // JSON100 object
+            params = json.data.config.value.value;
+        } else {
+            // !JSON100, parameters stored in seperate div       
+            let paramHolder = API.dom.element( name+"_parameters");
+            params = API.udjson.parse( paramHolder.textContent);
+        }
         let configZoneId = name + this.configSuffix;
         let configZone = API.dom.element( configZoneId);
         if ( !configZone || !params) return debug( { level:5, return:false}, "No config zone to fill or no params in", name, configZone, params);

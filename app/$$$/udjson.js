@@ -27,6 +27,7 @@ class UDJSON {
     use_onclick = false;
     use_onclick_el = "";
     mode = "";
+    jsonComments = {};
   
     constructor( dom) {
         this.dom = dom;
@@ -158,6 +159,7 @@ class UDJSON {
             if ( returnValue != "") return returnValue; 
             else return json;
         }
+        return '';
     }
     
    /**
@@ -551,6 +553,7 @@ class UDJSON {
                 } 
             }
             json = this.checkClasses( json);
+            // Check for ud_follow attribute to avoid jsonising generatable content 
             if ( this.value( json, 'follow') == "off") { 
                 json[ 'value'] = "";
                 return json;
@@ -744,7 +747,15 @@ class UDJSON {
                     }
                 }
                 if ( sourceId) this.dom.attr( element, 'ude_bind', sourceId);
-                else this.dom.attr( element, 'ude_bind', id+'_object');            
+                else this.dom.attr( element, 'ude_bind', id+'_object');                     
+                if (containerClass) {
+                    // Just add first class if multiple classes (cf initialcontent)
+                    /*
+                    * Improve = ignore initialcontent
+                    */
+                    let containerClasses = containerClass.split( ' ');
+                    element.classList.add( containerClasses[0]);
+                }
             }
             // TRIAL #2207006
             if ( API) {
@@ -755,10 +766,17 @@ class UDJSON {
             // Insert hidden name editor
             // this.dom.insertElement( 'span', id, { class:"objectName hidden", ude_stage:"on"}, element, false, true);
         } else if ( tag) {    
-            // object has tag so create element
+            // Object has tag so create element
             element = document.createElement( tag);
             if (id) element.id = id;
-            if (containerClass) element.classList.add( containerClass);
+            if (containerClass) {
+                // Just add first class if multiple classes (cf initialcontent)
+                /*
+                * Improve = ignore initialcontent
+                */
+                let containerClasses = containerClass.split( ' ');
+                element.classList.add( containerClasses[0]);
+            }
             if ( id.indexOf( 'editZone') > 0 && sourceId) this.dom.attr( element, 'ude_bind', sourceId);
             let element_use_onclick = ( this.value( meta, 'ui')) ? false : this.use_onclick;
             for( let key in this.attrMap) {
@@ -771,22 +789,30 @@ class UDJSON {
                         this.dom.attr( element, this.attrMap[ key], this.value( meta, key));
                 }
             }
-        }    
+        } else {
+            // Error
+        }   
         // continue classname,
         // Add content
         // 2DO head, body
         if ( !element) return null;
-        let data = this.value( json, 'data');
+        let content = this.value( json, 'data');
+        if ( !content) content = this.value( json, 'value');
+        if ( !content) content = this.value( json, 'placeholder');
+        if ( !content) content = "";
+        /*
         let content = "";
         if ( data) content = data;
         else content = this.value( json, 'value');
+        */
         /*
         else for ( key in json) {
             if key starts with tag or specials (jsontable for ex)
             recursive call or call another fct
-        }
-        */
+        }        
         if ( !content) { content = "";};
+        */
+       // Process content as string, object or array
         if ( typeof content == "string") {
             // String value, add text node
             if ( content == "" && json.tag == "br") element.appendChild( document.createElement( 'br'));            
@@ -828,15 +854,17 @@ class UDJSON {
                         element.appendChild( child);
                     }      
                 } // end of array item loop
-             } else if (content) {
+            } else if (content) {
                     // Single object
+                    let initialise = false;
                     //console.log( content, "object");
                     let contentType = content.tag;
                     let child = null;
                     if ( content.name) id = content.name;                
                     if ( contentType == "textedit") {
-                        if ( !content.value) { content.value = { dummy:"..."};}
-                        child = this.createTextEditor( content.value, id, content.class); //, this.value( content, 'mime'));
+                        if ( !content.value) { content.value = { dummy:"..."};}                        
+                        let id2 = id.replace( 'editZone', '-table'); // Patch for HTML elements where table is cretae din editZone
+                        child = this.createTextEditor( content.value, id2, content.class); //, this.value( content, 'mime'));
                     } else if ( contentType == "datadiv") {
                         child = document.createElement( 'div'); 
                         child.innerHTML = JSON.stringify( content.value);
@@ -846,14 +874,19 @@ class UDJSON {
                         if ( !content.value) { content.value = { dummy:"..."};}
                         child = this.createList( content.value, id, content);
                         // Carry down element's class
-                        if ( containerClass && !this.dom.keepPermanentClasses( child.className)) 
-                            child.classList.add( containerClass);
+                        if ( containerClass) // && !this.dom.keepPermanentClasses( child.className)) 
+                            child.className = containerClass; // List.add( containerClass);
                     } else if ( contentType == "jsontable") {
                         if ( !content.value) { content.value = { dummy:"..."};}
                         child = this.createTable( content.value, id, content);
                         // Carry down element's class
-                        if ( containerClass && !this.dom.keepPermanentClasses( child.className)) 
-                            child.classList.add( containerClass);
+                        if ( containerClass) // && !this.dom.keepPermanentClasses( child.className)) 
+                            child.className = this.dom.keepPermanentClasses( containerClass, false);//containerClass; //List.add( containerClass);
+                    } else if ( content.tag == "div" && content.class.indexOf( 'object') > -1 && typeof content.value == "object") {
+                        // div.object means its a JSON100 element - write value object as JSON and initialise parent element after creation
+                        content.value = JSON.stringify( content.value).replace( /&quot;/g, '&amp;quot;'); // &quot; gets converted via innerHTML
+                        child = this.putElement( content, sourceId, tag, containerClass);
+                        initialise = true;
                     } else {
                         // if ( content.value && this.value( content, 'skipEmpty') != "on");
                         if ( !this.value( content, 'class') && containerClass) content.class = containerClass;
@@ -865,6 +898,7 @@ class UDJSON {
                     * if (child)
                     */    
                     element.appendChild( child);
+                   // if ( initialise) setTimeout( function() { $$$.initialiseElement( $$$.dom.elementByName( meta.label));}, 5000);
             }
         }    
         // Add caption
@@ -875,6 +909,7 @@ class UDJSON {
             let captionSpan = document.createElement( 'span');
             captionSpan.className = "caption";
             captionSpan.innerHTML = caption;  // + ' <span class="objectName" ude_stage="on">'+id+'</span>';
+            this.dom.attr( captionSpan, 'spellcheck', "false");
             // 2DO Bind 
             switch ( captionPosition)
             {
@@ -890,7 +925,7 @@ class UDJSON {
                     break;
             }
         }    
-        // Link head & body scrolling on tables
+        // Arrange table
         if ( typeof process != "object") { // !TESTING
             let table = this.dom.element( "table", element);        
             if ( table && table.parentNode == element) { 
@@ -899,7 +934,7 @@ class UDJSON {
         }
                
         // Add Cached data        
-        if ( data) {
+        if ( json) {
             let cache = this.value( json, 'cache');
             if ( cache && typeof cache.tag != "undefined") element.appendChild( this.putElement( cache, sourceId, tag));
         }
@@ -939,7 +974,7 @@ class UDJSON {
             let item = document.createElement( 'li');
             let itemContent = items[ itemi];
             if ( typeof itemContent == "object") {
-                let tempEl = this.putElement( itemContent, false);
+                let tempEl = this.putElement( { tag:'li', value:itemContent}, false);
                 item.innerHTML = ( tempEl) ? tempEl.innerHTML : "ERR";                
             } else {
                 item.innerHTML = itemContent;
@@ -966,8 +1001,8 @@ class UDJSON {
                 itemData = "=" + this.dom.attr( item, 'ude_formula');
             } else {
                 itemData = item.textContent;
-                if ( item.innerHTML != itemData) {
-                    // If cell contains HTML then save value part of cell as object
+                if ( this.dom.isHTML( itemData)) {
+                    // If cell contains HTML then save cell content as object
                     let tempObj = this.getElement( item, false);
                     itemData = ( tempObj) ? tempObj.value : "ERR";
                 }
@@ -1241,10 +1276,16 @@ class UDJSON {
         if ( typeof json == "string" && json != "") json = JSON.parse( json);
         if ( !json) return "";
         let text = "";
-        if ( !textKeyPrefix) text += "JSON content\n"; // 1st line indicates JSON content
+        let comments = this.jsonComments;
+        let commentsKey = $$$.getParameter( 'comment-key-in-JSON');
+        if ( !textKeyPrefix) {
+            text += "JSON content\n"; // 1st line indicates JSON content            
+            comments = ( typeof json[ commentsKey] != "undefined") ? json[ commentsKey] : [];
+            this.jsonComments = comments;
+        }
         for( let key in json)
         {
-            if ( key == "length") continue;
+            if ( key == "length" || key == commentsKey) continue;
             let value = json[ key];
             let textKey = textKeyPrefix + key
             switch ( typeof value)
@@ -1263,7 +1304,11 @@ class UDJSON {
                 default :
                     debug( { level:2}, "unknown value type in JSON", textKeyPrefix + key, value);
                     break;
-            }    
+            }  
+            // Comments  
+            if ( comments && typeof comments[ textKey] != "undefined") {
+                text += '//' + comments[ textKey] + "\n"; 
+            }            
         }
         return text;
     }  // UDEtext.JSONtoText()  
@@ -1308,17 +1353,28 @@ class UDJSON {
         return json;        
     } // UDJSON.readTextEditor()
     
-    prepareJSONstring( json, line)
-    {   
+    prepareJSONstring( json, line) {  
+        // Handle comments
+        if ( line.substring(0, 2) == "//") {
+            // Comment line        
+            let commentsKey = $$$.getParameter( 'comment-key-in-JSON');
+            if ( typeof json[ commentsKey] == 'undefined') json[ commentsKey] = {};
+            json[ commentsKey][ this.lastJSONkeys.join('/')] = line.substring( 2); // add \n
+            return json;
+        }                
+        // Split line into key & value
         let p = line.indexOf('=');
         if ( p <= 0) return json; // 2DO test for comments too
         let key = line.substr( 0, p).trim();
         let value = line.substr( p+1).trim();
+        /*
+        * 2DO Look for end of line comment & store 
+        */
         /*if ( value.charAt(0) == '[' && value.charAt( value.length - 1) == ']') value = JSON.parse( value);
         else value = JSON.parse( value);*/ 
         if ( value) value = JSON.parse( value); else value = null;        
         let keys = key.split( '/');
-        // Replace empty key slots with mast value used
+        // Replace empty key slots with last value used
         for ( let keyi=0; keyi < keys.length; keyi++) {
             if ( keys[ keyi].length == 0) keys[ keyi] = this.lastJSONkeys[ keyi];            
         }
@@ -1483,6 +1539,14 @@ if ( typeof process == 'object') {
             //dumpElement( element);
             //console.log( got);
             testResult( test, ( JSON.stringify( got.data) == JSON.stringify( json.data)), JSON.stringify( got));
+        }
+        {
+            test = "parsing stringify &quot";
+            data = [ "HTML", "&lt;div style=&quot;width:100%;&quot;&gt;"];
+            json = JSON.stringify( data);            
+            let el = document.createElement( 'div');
+            el.innerHTML = json.replace( /&quot;/g, '&amp;quot;');
+            testResult( test, ( json.indexOf( '&quot;') > -1 && el.innerHTML.indexOf( '&amp;quot;') > -1), json + el.innerHTML);
         }
         // End of auto-test
         console.log( "Test completed");    

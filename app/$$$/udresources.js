@@ -37,7 +37,7 @@ class UD_ressources {
         { 
             if ( !API && typeof process == "object") API = api;
             API.addFunctions( this, [ 
-                "getTagOrStyleInfo", "getTagOrStyleLabel",
+                "getTagOrStyleInfo", "getTagOrStyleLabel", "getStyleLabel", "getTagLabel",
                 "availableTags", "listTypeAndSubTypeClasses", "availableClassesForExtag", "availableClasses",
                 "availableStylesForSelection", "availableTagsForSelection",
                 "availableLayouts", "availableLayoutsForExTag",
@@ -86,12 +86,14 @@ class UD_ressources {
         let lang = window.lang;
         let info = API.json.value( UD_exTagAndClassInfo, tagOrStyle);
         if ( info && attr) {
-            return API.json.value( info, attr);    
+            let val = API.json.value( info, attr);
+            // if (attr == 'nextId') increment
+            return val;    
         } else if (info) {
             return info;
         }
-        return "";
-    } // getTagOrStyleLabel()
+        return "";        
+    } 
 
     
    /**
@@ -108,19 +110,43 @@ class UD_ressources {
     * @return {string} The displayable label
     * @apiGroup Register
     */    
-    getTagOrStyleLabel( tagOrStyle) {
+   // 2DO seperate styleLabel & tagLabel ?
+    getTagOrStyleLabel( tagOrStyle, elementOrId="") {
+        if ( !tagOrStyle) return "";
         let label = "";
         let lang = window.lang;
-        let info = API.json.value( UD_exTagAndClassInfo, tagOrStyle);
+        let info = null;
+        let gval = API.json.value;
+        if ( elementOrId) {
+            let element = $$$.dom.getEditableParent( elementOrId);
+            let exTag = this.dom.attr( element, 'exTag');
+            if ( this.getParameter( 'register')[ 'store-labels-by-view']) {
+                // Associate view with search for label             
+                let viewType = API.dom.getViewType( element);
+                let viewClass = API.dom.getViewClass( element);    
+                if ( exTag && viewType && viewClass) {
+                    info = gval( UD_exTagAndClassInfo, "div.part."+viewType+" "+"."+viewClass+" "+exTag+"."+tagOrStyle);
+                }
+            }
+            if ( !info && exTag != tagOrStyle) {
+                // Look for info for the specific extended tag with style
+                info = gval( UD_exTagAndClassInfo, exTag+"."+tagOrStyle);
+            }                   
+        } 
+        if ( !info) {
+            // Look for info on the TagOrStyle label
+            info = API.json.value( UD_exTagAndClassInfo, tagOrStyle);
+        }    
         if ( info) {
             label = "";
-            if ( lang != "EN") { label = API.json.value( info, "label_" + lang);}
-            if ( !label) { label = API.json.value( info, 'label');}            
-        } else { label = API.translateTerm( tagOrStyle);}
-        if ( !label) { label = tagOrStyle;}
+            if ( lang != "EN") { label = $$$.json.value( info, "label_" + lang);}
+            if ( !label) { label = $$$.json.value( info, 'label');}            
+        } else { label = $$$.translateTerm( tagOrStyle);}
+        if ( !label) { label = $$$.translateTerm( tagOrStyle);}
         return label;
     } // getTagOrStyleLabel()
-
+    getStyleLabel( style, elementOrId="") { return this.getTagOrStyleLabel( style, elementOrId);}
+    getTagLabel( tag, elementOrId="") { return this.getTagOrStyleLabel( tag, elementOrId);}
     
    /**
     * @api {JS} API.availableTags(elementOrId) Return an array of available extended tags for an element
@@ -131,11 +157,13 @@ class UD_ressources {
     availableTags( elementOrId) {
         let tags = [];
         let element = API.dom.element( elementOrId);
-        let exTag = API.dom.attr( element, 'exTag');
-        /*
-        let tagMap = this.classMap[  "div.part."+API.dom.getViewType( element)][ 'elements'][ API.dom.attr( element, 'exTag')];
-        if ( tagMap) { tags = Object.keys( tagMap);}
-        */
+        let exTag = API.dom.attr( element, 'exTag');        
+        // #2410023 - limit tags available inside zone
+        let parent = element.parentNode;
+        let parentExTag = $$$.dom.attr( parent, 'exTag');
+        if ( parentExTag == 'div.zone' && parent.classList.contains( 'text-only')) {
+            return [ 'p'];            
+        }
         if ( !element) return tags;
         let gval = API.json.value;
         let viewType = API.dom.getViewType( element);
@@ -176,27 +204,25 @@ class UD_ressources {
     */
     availableClassesForExtag( exTag, viewType = "doc", viewClass = "") {
         let classes = [];
-        let gval = API.json.value;
-        let info = this.info[ exTag];
-        /*
-        if ( exTag == "div.part") {
-            classes = this.info[ exTag+'.'+viewType][ classes];    
+        let gval = API.json.value; // short cut to value 
+        let info = this.info[ exTag]; // info for this element
+        // Lookup list based on view's class
+        let classesByViewClass = gval( info, 'classesByViewClass');
+        let classListByViewClass =  ( classesByViewClass) ? gval( classesByViewClass, /*viewType + "." + */viewClass) : null;
+        if ( classListByViewClass) {
+            classes = classListByViewClass;
         } else {
-        */
-        let classesByViewType = gval( info, 'classesByViewType');
-        /*
-        use selector = viewType or viewType.viewClass for better precision
-        could rename classesByViewType as classesByViewTypeAndClass
-        if ( classesByViewType) {
-            if ( gval( classesByViewType, viewType)) classes = gval( classesByViewType, viewType);
-            if ( gval( classesByViewType, 'default')) classes = classes.concat( gval( classesByViewType, 'default'));
+            // Lookup list based on view type
+            let classesByViewType = gval( info, 'classesByViewType');
+            let classListByViewType = gval( classesByViewType, viewType) ? gval( classesByViewType, viewType) : gval( classesByViewType, 'default');
+            classes = ( classListByViewType) ? classListByViewType : [];
         }
-        Replac 155-158
-        */
+        /* old code
         classes = ( classesByViewType) ? 
             ( gval( classesByViewType, viewType)) ? 
                 ( gval( classesByViewType, viewType)) : gval( classesByViewType, 'default') 
                 : [];
+        */
         //console.log( info, classes, classesByViewType);                
         return classes;
     } // UD_ressources.getAvailableClassesForExtag()
@@ -212,6 +238,7 @@ class UD_ressources {
         let element = API.dom.element( elementOrId);
         if ( !exTag) exTag = API.dom.attr( element, 'exTag');
         if ( !viewType) viewType = API.dom.getViewType( element);
+        if ( !viewClass) viewClass = API.dom.getViewClass( element);
         classes = this.availableClassesForExtag( exTag, viewType, viewClass);
         let notLay = [];
         for ( let classi=0; classi < classes.length; classi++) {
@@ -227,11 +254,11 @@ class UD_ressources {
     * @apiSuccess {string[]} Array of class names
     * @apiGroup Parameters
     */
-    availableLayouts( elementOrId) {
+    availableLayouts( elementOrId, exTag="", viewType="") {
         let classes = [];
         let element = API.dom.element( elementOrId);
-        let exTag = ( element) ? API.dom.attr( element, 'exTag') : elementOrId; //2DO availableLayoutsForExtag
-        let viewType = API.dom.getViewType( element);
+        if ( !exTag) exTag = ( element) ? API.dom.attr( element, 'exTag') : elementOrId; //2DO availableLayoutsForExtag
+        if ( !viewType) viewType = API.dom.getViewType( element);
         classes = this.availableClassesForExtag( exTag, viewType);
         let lay = [];
         for ( let classi=0; classi < classes.length; classi++) {
@@ -265,7 +292,7 @@ class UD_ressources {
 
   
     /**
-    * @api {JS} API.availableStylesForSelection(elementOrId) Return an array of styles for a selection in an element
+    * @api {JS} $$$.availableStylesForSelection(elementOrId) Return an array of styles for a selection in an element
     * @apiParam {string} extag The extended tag
     * @apiSuccess {string[]} Array of class names
     * @apiGroup Parameters
@@ -305,6 +332,12 @@ class UD_ressources {
     getViewTypeClass() {}
     getClassesForView() {}
     
+    /**
+    * @api {JS} $$$.defaultContent(elementOrId) Return the default content of an element
+    * @apiParam {mixed} elementOrExtag The element or is extended tag
+    * @apiSuccess {string} HTML default content
+    * @apiGroup Parameters
+    */
     defaultContent( elementOrExTag, viewTypeOrClassName = "", asHTML = false) {
         let exTag = ( typeof elementOrExTag == "object") ? this.dom.attr( elementOrExTag, 'exTag') : elementOrExTag;
         if ( !viewTypeOrClassName && typeof elementOrExTag == "object") 
@@ -322,11 +355,51 @@ class UD_ressources {
         if ( typeof defaultContent == "object" && asHTML) defaultContent = API.json.toHTML( defaultContent);
         return defaultContent;
     } // UD_ressources.defaultContent()
+
+    hasDefaultContentByPath( element, exTag) {
+        /*
+        let exTag = ( typeof elementOrExTag == "object") ? this.dom.attr( elementOrExTag, 'exTag') : elementOrExTag;
+        if ( !viewTypeOrClassName && typeof elementOrExTag == "object") 
+            viewTypeOrClassName = API.getViewType( elementOrExTag);
+            */
+
+        let info = this.info[ exTag];
+        let defaultContentPath = API.json.value( info, 'defaultContentPath');
+        if ( defaultContentPath) {
+            let content = this.getJSONcontentByPath( element, defaultContentPath);
+            if ( content) return ( JSON.stringify( API.json.value( info, 'defaultContentByPath')) == content);
+        }
+        return false;
+    }
         
-    hasDefaultContent( elementOrId) {
+    hasDefaultContent( elementOrId, exTag="", className="") {
         let element = this.dom.element( elementOrId);
-        let exTag = this.dom.attr( element, 'exTag');
-        return ( element.innerHTML == this.defaultContent( exTag));
+        if ( !exTag) exTag = this.dom.attr( element, 'exTag');
+        if ( exTag == "div.part") {
+            let children = this.dom.children( element);
+            let defaultContent = this.defaultContent( exTag, className);
+            // 2DO Improve ... this is a very approximative content comparaison 
+            return ( element.textContent.length < 20 || children.length == Object.keys( defaultContent).length);        
+        } else {
+            return (
+                !element.innerHTML
+                || element.textContent == this.dom.attr( element, 'ude_place')
+                || this.hasDefaultContentByPath( element, exTag)                
+                || element.innerHTML == this.defaultContent( exTag, className)
+            );
+        }
+    }
+
+    getJSONcontentByPath( element, path) {
+        // Get object
+        let name = this.dom.attr( element, 'name');
+        let obj = this.dom.element( '#'+name+'_object', element);
+        if ( obj) {
+            // Get part of object (via the path) to test
+            let val = this.dom.udjson.valueByPath( obj.innerText, path);
+            if ( val) return JSON.stringify( val);
+        }
+        return "";
     }
 
    /**
@@ -400,19 +473,29 @@ class UD_ressources {
     * @apiSuccess {mixed} default value, "" if none
     * @apiGroup Parameters
     */        
-    testEditorAttr( elementOrId, attr, value) {
+    testEditorAttr( elementOrId, attr, value="") {
+        let element = this.dom.element( elementOrId);
         let attrValue = this.getEditorAttr( elementOrId, attr);
         let docModeHolder = this.dom.element( 'UD_mode');
         let elementMode = "edit2";
-        if ( docModeHolder) elementMode = docModeHolder.textContent;       
-        if ( elementMode == "edit3" && [ 'ude_edit', 'ude_menu'].indexOf( attr) > -1) attrValue = "on";
-        return ( attrValue == "on" || ( value && attrValue.indexOf( value) > -1) );
+        if ( docModeHolder) elementMode = docModeHolder.textContent;
+        // Patch 221017 to stop App views being saved
+        if ( element.id && element.id.substr( 0,2) != "B3" && elementMode == "edit3" && [ 'ude_edit', 'ude_menu'].indexOf( attr) > -1) attrValue = "on";
+        // let result = ( attrValue != "off" || ( value != "" && attrValue.indexOf( value) > -1) );
+        let result = (
+            attrValue == 'on'
+            || ( attrValue && attrValue != 'off' && value != "" && attrValue.indexOf( value) > -1)
+        );
+        return result;
     } // // UD_ressources.testEditorAttr()
     
     getParameter( name, scope="global") {
         let r = "";
         if ( scope == "global") {
             r = this.dom.udjson.value( UD_register[ 'UD_parameters'], name);
+        } else if ( scope == "register") {
+            // 2DO Try a search to avoid needing full path, or lookup in a shortcut table
+            r = this.dom.udjson.valueByPath( UD_register, name);
         } else {
             let holder = API.dom.element( 'UD_' + name);
             if ( holder) r = holder.textContent;   
@@ -441,7 +524,7 @@ class UD_ressources {
     hasLanguageSuffix( term) {
         let last2 = term.substr( term.length-2);
         let languageCodes = this.getParameter( 'languageCodes');
-        if ( languageCodes.indexOf( last2)) return true;
+        if ( languageCodes.indexOf( last2) > -1) return true;
         return false;
     }
    /*
@@ -482,7 +565,7 @@ class UD_ressources {
     }
     
     refreshResource( resourceName) {
-       if ( resourceName == "UD_tagAndClassInfo") this.info = API.json.parse( "UD_tagAndClassInfo");  
+        if ( resourceName == "UD_tagAndClassInfo") this.info = this.register[ 'UD_exTagAndClassInfo'];      
     }
   
   /**
@@ -506,7 +589,7 @@ class UD_ressources {
     } // UD_ressources.updateClassMap()
     
     updateResource( resourceOrName, json) {     
-    /* DEPRECATED #2222007
+    /* DEPRECATED #2222007 2231003 Non used by A4 text
         let holder = API.dom.element( resourceName);
         if ( resourceName == "class map") { holder = API.dom.element( 'UD_classMap');}
         if ( !holder) return;
@@ -525,23 +608,18 @@ class UD_ressources {
 
    /**
     * @api {JS} API.loadRessourceFile(filepath) Load ressources from a file
-    * @apiParam {string} filepath URL of file
+    * @apiParam {string} filePath URL of file
     * @apiSuccess {string} return true
     * @apiError {object} return null
     * @apiGroup Parameters 
-    */       
-   /**
-    * Load ressources from a file
-    * @param {string} tagOrStyle  The value to be labellised
-    * @return {string} The displayable label
-    */    
-    loadResourceFile( filepath) {
+    */          
+    loadResourceFile( filePath) {
         // Get file name and assume variable will be created with this name
         let name = "standalone";
         // Prepare onload call
         let onload = "API.loadRessources( name);"
         // Load script
-        API.loadScript( filepath, onload);
+        API.loadScript( filePath, onload);
     } // UD_ressources.loadRessourcesFromFile()
 
    /**

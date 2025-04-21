@@ -482,7 +482,8 @@ class UDEdraw
         case "save" :
             let target = e.target;
             let displayable = editZone;
-            processed = this.prepareToSave( displayable, dataHolder);
+            if ( typeof target != "undefined" && typeof displayable != "undefined")
+                processed = this.prepareToSave( displayable, dataHolder);
             break;
             
         default :
@@ -970,9 +971,8 @@ if ( typeof process != 'object') {
     }
 } else {
     // Testing under node.js
-    module.exports = { class: UDEdraw};
-    if ( typeof global.JSDOM == "undefined" && typeof window == "undefined")
-    {
+    if( typeof module != "undefined") module.exports = { class: UDEdraw, UDEdraw:UDEdraw};    
+    if ( typeof global.JSDOM == "undefined" && typeof window == "undefined") {
         console.log( 'Start of test program');
         console.log( 'Syntax:OK');
         let path = "../..";
@@ -1002,5 +1002,14 @@ if ( typeof process != 'object') {
         }         
         console.log( 'Test completed');
         process.exit();
-    }        
+    } else {
+        let exTag = "div.graphic";
+        if ( window.ud && window.ud.ude && !window.ud.ude.modules[ exTag].instance) {
+            // Initialise
+            let modulel = new UDEdraw( window.ud.dom, window.ud.ude);
+            window.ud.ude.modules[ exTag].instance = modulel;
+            window.ud.ude.modules[ exTag].state = "loaded";
+            window.ud.ude.draw = modulel;
+        }
+    }       
 } // End of test routine

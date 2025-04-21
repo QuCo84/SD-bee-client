@@ -1,5 +1,7 @@
  
      // ZONE here obsolete put in ud.js
+    /*
+
     // jquery equivalent use ES5
     function getComputedStyle( element, attrName)
     {
@@ -7,15 +9,7 @@
     }
     function Zone( name1, name2)
     {
-    /*
-      this.name; // zone name
-      element; // HTML element
-      mode;
-      saveContent;
-      params; // min max width etc
-   
-      constructor = function( name1, name2) {
-      */
+
         this.stayOpenTime = 180000;
         this.getStyle1 = function(attributeName, type)
         {
@@ -111,9 +105,10 @@
        
        this.closeIfAnchor = function( target, resetZone=false)
        {
-           if (target.tagName.toLowerCase() == 'a' /*!= "input"*/) this.closeAll( resetZone);
+           if (target.tagName.toLowerCase() == 'a' ) this.closeAll( resetZone);
        }
- } // Class zone     
+ } // Class zone 
+ */    
  
  // Global variables
 var group_index = 0;

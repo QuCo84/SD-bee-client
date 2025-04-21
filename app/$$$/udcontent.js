@@ -82,7 +82,7 @@ class UD_content {
         let element = dom.element( elementOrId);
         let saveable = dom.getSaveableParent( element);
         if ( !saveable) return;
-        let exTag = dom.attr( saveable, 'exTag');
+        let exTag = dom.attr( saveable, 'exTagType');
         let eventType = (event) ? event.eventType : "";
         let update = false;
         // Check if element is to be updated
@@ -90,8 +90,8 @@ class UD_content {
         else {
             // OK if it has default content
             update = (
-                ( event.wasUndefined)
-                ||
+                //( event.wasUndefined)
+                //||
                 ( eventType == "changeTag" && API.hasDefaultContent( saveable, event.oldTag))
                 ||
                 ( eventType == "changeClass" && API.hasDefaultContent( saveable, exTag, event.oldClass))
@@ -156,7 +156,7 @@ class UD_content {
                 if ( !defaultContent) defaultContent = { "para": {"tag":"p","value":"..."}};
                 // Write default content
                 // BUG confusion between old and new default content
-                if ( exTag == "div.part" || exTag == "div.zone") { 
+                if ( exTag.indexOf( "div.part") > -1 || exTag == "div.zone") { 
                     return this.setViewContent( element, defaultContent);
                 } else { 
                     element.innerHTML = API.json.toHTML( defaultContent);
@@ -214,7 +214,10 @@ class UD_content {
                         for ( let childi=0; childi < children.length; childi++) {
                             let child = children[ childi];
                             if ( dom.attr( child, 'exTag') == "span.caption") continue;
-                            if ( typeof process != "object") { window.ud.viewEvent( 'create', child);}
+                            if ( typeof process != "object") {
+                                window.ud.viewEvent( 'create', child);
+                                if ( child.id && child.tagName == "DIV") $$$.initialiseElement( child.id);
+                            }
                         }
                     }
                 }

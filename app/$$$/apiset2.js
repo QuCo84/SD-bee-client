@@ -41,7 +41,8 @@ class UDapiSet2 {
             this.utilities = API.utilities;
             API.addFunctions( this, [
                 "addMenuOption", "toggleMenu", "showBotlog", "getKeywords", "updateZone", "deleteDoc",
-                "appEvent", "listenAppEvent"
+                "appEvent", "listenAppEvent", "getLang", "replaceBannerWithMenu", "setLogoLink", 
+                "toggleDisplay", "contactFromTable", "hide"
             ]);            
         }
     } // UDapiSet2.construct()
@@ -53,6 +54,9 @@ class UDapiSet2 {
     * @apiParam {string} label Displayed label of the option
     * @apiParam {string} action Onclick JS code for menu option
     * @apiGroup Web pages    
+    */
+   /**
+    * 230703 - Has this ever been used ? Duplicate with replacebannerWithMenu recently added
     */
     addMenuOption( menuName, optionName, label, action) {
         // Find main menu
@@ -228,22 +232,61 @@ class UDapiSet2 {
     }
     
     deleteDoc( oid = "") {
-        if ( !oid) {
-            // Secure check mode
-            let mode = $$$.dom.textContent( 'UD_mode');
-            if ( [ 'edit2', 'edit3'].indexOf( mode) == -1) return;
-            // OK Delete in Manage doc page 
-            oid = this.dom.attr( 'document', 'ud_oid');
-        }
-        let oidA = oid.split('--')[1].split('-');
-        let oidStr = "UniversalDocElement--" + oidA.join('-') + "--SP|" + ( Math.round( oidA.length/2) - 1);// + "|WB|1";
-        // Simulate form 
-        let uri = "/webdesk/" + this.dom.attr( 'document', 'ud_oidchildren') + "/AJAX_modelShow/";
-        let prompt = API.translateTerm( "Are you sure ?")
-        if ( confirm(prompt)) {
-            let postData = "form=INPUT_UDE_FETCH&input_oid="+oidStr+"&iaccess=0&tlabel=owns";
-            let context = {zone: 'document', element: null, action:"fill zone", setCursor:false, ud:this.dataSource};
-            this.ud.udajax.serverRequest( uri, "POST", postData, context);
+        // 2DO use INPUT_deleteDoc if OS
+        if ( UD_SERVICE != 'webdesk') {
+            // OS version
+            // Get doc's oid 
+            oid = ( oid) ? oid : this.dom.attr( 'document', 'ud_oid');
+            console.log( "Deleting " + oid);
+            // Create POST data
+            let postdata = "";
+            // Form info
+            postdata += "form=INPUT_deleteDoc";
+            postdata += "&input_oid="+oid;
+            // URL to call
+            let dir = this.dom.attr( 'document', 'ud_oid');
+            if ( dir == oid) {
+                // Deleting current document
+                let call = '/' + UD_SERVICE + '/';
+                console.log( "Deleting " + oid + ' with ' + call);
+                // Prepare context for response handling
+                let context = { action:"ignore", zone: "",  setCursor:false};   
+                this.ud.udajax.serverRequest( call, "POST", postdata, context);
+            } else {
+                // Deleting from dir listing            
+                let call = '/' + UD_SERVICE + '/' + dir + '/AJAX_listContainers/';
+                console.log( "Deleting " + oid + ' with ' + call);
+                // Prepare context for response handling
+                let context = { action:"fill zone", zone: "BE00000000000000M_dirListing",  setCursor:false};   
+                this.ud.udajax.serverRequest( call, "POST", postdata, context);
+            }    
+
+        } else {
+            // SOILinks version
+            if ( !oid) {
+                // Secure check mode
+                let mode = $$$.dom.textContent( 'UD_mode');
+                if ( [ 'edit2', 'edit3'].indexOf( mode) == -1) return;
+                // OK Delete in Manage doc page 
+                oid = this.dom.attr( 'document', 'ud_oid');
+            }
+            let oidA = oid.split('--')[1].split('-');
+            let oidStr = "UniversalDocElement--" + oidA.join('-') + "--SP|" + ( Math.round( oidA.length/2) - 1);// + "|WB|1";
+            // Simulate form 
+            let uri = "/webdesk/" + this.dom.attr( 'document', 'ud_oidchildren') + "/AJAX_modelShow/";
+            let prompt = API.translateTerm( "Are you sure ?")
+            if ( confirm(prompt)) {
+                let postData = "form=INPUT_UDE_FETCH&input_oid="+oidStr+"&iaccess=0&tlabel=owns";
+                let context = {zone: 'none', element: null, action:"ignore", setCursor:false, ud:this.dataSource};
+                let pr = this.ud.udajax.serverRequestPromise( uri, "POST", postData, context);
+                pr.then( () => { 
+                    let uri = "/webdesk/" + this.dom.attr( 'document', 'ud_oid') + "-21/AJAX_modelShow/";
+                    let zone = this.dom.elementByName( 'Dir listing');
+                    let context = {zone: zone.id, element: null, action:"fill zone", setCursor:false, ud:this.dataSource};
+                    this.ud.udajax.serverRequest( uri, "GET", '', context);
+                    //refreshListing();
+                });
+            }
         }
     }  
 
@@ -262,6 +305,128 @@ class UDapiSet2 {
         if ( !handlers) this.appEventHandlers[ eventName] = [ fct];
         else this.appEventHandlers[ eventName].append( fct);
         */
+    }
+
+    /**
+     * Get language of an element by examing its parents if required
+     * @param {*} elementOrId 
+     */
+    getLang( elementOrId) {
+        let element = this.dom.element( elementOrId);
+        let lang = this.dom.attr( element, 'ud_lang');
+        if ( !lang) lang = this.dom.parentAttr( element, 'ud_lang');
+        if ( !lang) lang = this.dom.textContent( 'UD_lang');
+        return lang;
+    }
+
+        /**
+         * Replace banner with a menu 
+         * @param {object} menu Object with label:link, or label:{label:link} for sub-menu
+         */
+        replaceBannerWithMenu( menu) {
+        let menuHTML = this.buildMenuHTML( menu);
+        let menuHolder = this.dom.element( 'menu');
+        menuHolder.innerHTML = menuHTML;
+        menuHolder.classList.remove( 'hidden');
+        let banner = this.dom.element( 'banner');
+        banner.style.display = 'none';
+        // Load mainmenu css
+        var link = document.createElement("link");
+        link.type = "text/css";
+        link.rel = "stylesheet";
+        link.href = "/upload/smartdoc/css/menu.css";
+        document.getElementsByTagName("head")[0].appendChild(link);
+    }
+    buildMenuHTML( menu, menuName = 'MainMenu', menuClass = 'mainMenu') {
+        let html = "";
+        let htmlMobile = "";
+        for ( let menuOption in menu) {
+            let instr = menu[ menuOption];
+            if ( typeof instr == 'string') {
+                // Add link entry
+                html += '<span class="' + menuClass + '">';
+                // let onclick = mobileMenu(); $$$.goTo( \'' + menuOption + '\', \'' + $view + '\', \'top\')    
+                // instr = '$$$.toggleDisplay(\'' + menuName + '\');' + instr;        
+                // Activate when history accepts JS instr = '$$$.addToHistory(\'' + instr + '\');' + instr;    
+                let click = "mobileMenu();";
+                if ( menuName != "MainMenu") click += "$$$.toggleDisplay( '" + menuName + "');";
+                click += instr;                
+                html += '  <a href="javascript:" onclick="' + click + '" title="' + menuOption + '">';
+                html += menuOption;
+                html += '</a></span>';
+            } else if ( typeof instr == 'object') {
+                // Add sub menu option
+                let subMenuName = 'menu-' + menuOption.replace( / /g, '-');
+                html += '<span class="' + menuClass + ' hasSubMenu" onclick="$$$.toggleDisplay(\'' + subMenuName + '\', this);">';
+                html += menuOption;
+                html += '</span>';
+                //html += '  <div id="' + subMenuName + '" style="display:none;" class="optionLevel1">';
+                let subMenuHTML = '  <div id="' + subMenuName + '" class="subMenu hidden">';
+                subMenuHTML +=       this.buildMenuHTML( instr, subMenuName, "menu-level-2");
+                subMenuHTML += '  </div>';
+                html += subMenuHTML;
+            }
+        }
+        let mobileMenu = this.dom.element( 'mobileMenu');
+        if ( mobileMenu) mobileMenu.innerHTML = html.replace( /menu-/g, 'mobilemenu-');
+        return html;
+    }
+
+    /**
+     * Set logo click action
+     * @param {string} action On click action for logo
+     * @param {string} title Hover title to display
+     */
+    setLogoLink( action, title="") {
+        let logo = this.dom.element( 'logo');
+        let link = this.dom.element( 'a', logo);
+        if ( !link) return false;
+        this.dom.attr( link, 'onclick', action);
+        this.dom.attr( link, 'title', title);
+        return true;
+    }
+
+    toggleDisplay( elementOrId, anchor = null) {
+        let element = this.dom.element( elementOrId);
+        if ( anchor) {
+            element.style.left = ( anchor.offsetLeft + 10)+"px";
+            element.style.top = ( anchor.offsetTop + 20) + "px";
+        }
+        // OLD if ( element.style.display == 'none') $$$.showOneOfClass( element); /*element.style.display = 'block';*/ else element.style.display = 'none';
+        if ( element.classList.contains( 'hidden')) $$$.showOneOfClass( element); /*element.style.display = 'block';*/ else element.classList.add( 'hidden');
+    }
+
+    /**
+     * Record a contact or message 
+     * @param {object} tableId String Id of table where contact info is stored (or name of containing element)
+     */
+    contactFromTable( tableId) {
+        let rows = $$$.findRows( tableId, '.*');
+        let contact = { name:'', email:'', account:'', developper:'', clients: ''};
+        let T = $$$.translateTerm;
+        let msg = "Contact from<br>";
+        for ( let rowi=0; rowi < rows.length; rowi++) {
+            let row = $$$.getRow( tableId, rows[ rowi]);
+            msg += row.question + ': ' + row.Value + '<br>';
+            if ( row.question.indexOf( 'name') > -1) contact.name += row.Value + ' ';
+            if ( row.question.indexOf( 'email') > -1) contact.email = row.Value;
+        }
+        // 2DO Check values
+        // Send email to webmaster
+        let params = {
+            provider : 'default',
+            action : 'contact',
+            contact : contact,
+            body: msg
+        }
+        $$$.service( 'contact', params);
+        
+
+    }
+
+    hide( elementName) {
+        let element = this.dom.elementByName( elementName);
+        if ( element) element.classList.add( 'hidden');
     }
 /*
 

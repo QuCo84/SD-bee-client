@@ -28,7 +28,8 @@ require.config({
     baseUrl:'app/',
     paths: {
         'moment': "https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js",
-        'dayjs' : "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.7/",
+        'dayjs' : "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.7/dayjs.min",
+        'dayjscdn' : "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.7",
         'ejs' : "https://cdn.jsdelivr.net/npm/ejs@3.1.9/ejs.min.js",
         'min-core' : 'https://www.sd-bee.com/upload/ude-min-v-0-3-1.js',
     },
@@ -55,7 +56,7 @@ function app_load_do() {
     if ( typeof window.onloadapp != "undefined") window.onloadapp();
     setTimeout( () => leftColumn.manageButtons(), 3000);
 }
-function app_load() {
+function app_load( pathToRegister) {
     // Get version file suffix to avoid JS cache issues
     let versionHolder = document.getElementById( 'UD_version');
     if ( versionHolder) version = versionHolder.textContent;
@@ -73,38 +74,27 @@ function app_load() {
         alert( "Loading error Please reload page " + e.message);
     };
     // !!! Uodate standard modules in udconstants.php when changing loaded modules under modules/
-    /*
-    // Using minimised core
+    // Using inidividual files
     modules = [
-        'https://www.sd-bee.com/upload/smartdoc/require-version/udregister-v-0-3-1.js',
-        'min-core',
-        'dayjs/dayjs.min', 
-        'dayjs/plugin/relativeTime', 
-        'dayjs/plugin/customParseFormat',
-        'dayjs/plugin/weekOfYear',
-        'dayjs/locale/fr.js',
-        'moment', // has to be here until we configure chart.js to use dayjs or don't add v string
-    ];
-    */
-   // Using inidividual files
-    modules = [
-        'helpers/debug'+version,
-        'config/udconstants'+version, 'config/udregister'+version,
-        '$$$/udjson'+version, 
-        'helpers/domcursor'+version, 'helpers/domvalue'+version, 'helpers/dom'+version, 'helpers/udajax'+version,
-        'config/udeconstants'+version, 'calculator/udecalc'+version, /*'calculator/udecalc_css'+version,*/
-        'helpers/udemenu'+version, 'helpers/udelayout'+version, 
-        'helpers/udeclickhandler'+version, 'ude'+version, 
-        'modules-autoload/udetext'+version,
-        '$$$/apiset1'+version, '$$$/apiset2'+version, '$$$/udapi'+version, '$$$/udmodule'+version, 'ud-utilities/udutilities'+version,
-        '$$$/udresources'+version,'$$$/udcontent'+version,
-        'tools/zone'+version,
-        'ud'+version, 
-        'dayjs/dayjs.min', 
-        'dayjs/plugin/relativeTime', 
-        'dayjs/plugin/customParseFormat',
-        'dayjs/plugin/weekOfYear',
-        'dayjs/locale/fr.js',
+        'app/config/udregister'+version,
+        'app/helpers/debug'+version,
+        'app/config/udconstants'+version, 
+        'app/$$$/udjson'+version, 
+        'app/helpers/domcursor'+version, 'app/helpers/domvalue'+version, 'app/helpers/dom'+version, 'app/helpers/udajax'+version,
+        'app/config/udeconstants'+version, 'app/calculator/udecalc'+version, /*'app/calculator/udecalc_css'+version,*/
+        'app/helpers/udemenu'+version, 'app/helpers/udelayout'+version, 
+        'app/helpers/udeclickhandler'+version, 'app/ude'+version, 
+        'app/modules-autoload/udetext'+version,
+        'app/$$$/apiset1'+version, 'app/$$$/apiset2'+version, 'app/$$$/udapi'+version, 
+        'app/$$$/udmodule'+version, 'app/$$$/udutilities'+version,
+        'app/$$$/udresources'+version,'app/$$$/udcontent'+version,
+        'app/modules-autoload/zone'+version,
+        'app/ud'+version, 
+        'dayjs', 
+        'dayjscdn/plugin/relativeTime', 
+        'dayjscdn/plugin/customParseFormat',
+        'dayjscdn/plugin/weekOfYear',
+        'dayjscdn/locale/fr',
         'moment', // has to be here until we configure chart.js to use dayjs or don't add v string
     ];
     // Turn busy LED on

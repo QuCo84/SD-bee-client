@@ -1,21 +1,4 @@
-/**
- * ud.js -- Universal Doc client-side
- *  Copyright (C) 2023  Quentin CORNWELL
- *  
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
+// SPDX-License-Identifier: GPL-3.0
 /**
  *   Implements the UniversalDoc Javascript class for exchanging editable HTML elements under a specific DIV with a server. Operations
  *   include saving changes and newly created elements as well as fetching updates from the server when multiple users may work on the
@@ -96,6 +79,7 @@ class UniversalDoc
     fetchAction = "AJAX_fetch";
     refreshAction = { model: "AJAX_modelShow", model3: "AJAX_modelShow", edit2: "AJAX_show", edit3: "AJAX_show", display2:"AJAX_show"};
     serverFormName = "INPUT_UDE_FETCH";
+    serverTime = 0;
     /*
     exTagMap = { 
          4: "div.part", 5:"div.zone", 6:"h1", 7:"h2", 8:"h3", 9:"h4", 10:"p", 11:"p.subpara",
@@ -209,6 +193,8 @@ class UniversalDoc
         //if ( typeof process == 'object') this.dom = new window.DOM( this.topElement, this);  
         this.dom = new DOM( this.topElement, this);
                  
+        // Temp instruction for monitoring nb of DOM elements for ecoindex
+        console.log( "Page contains " + document.getElementsByTagName( '*').length + ' elements');
         /*
         // Get network status and instantiate UDAJAX
         let url = window.location.href.split('/');
@@ -236,8 +222,8 @@ class UniversalDoc
 
         // Setup $$$ function library (API)
         if ( typeof UDapi == "undefined")
-        this.ude.loadScript( "ud-view-model/udapi.js", "window.ud.api = new UDapi( window.ud);", "UDapi", "UDapi");
-        else  this.api = setupAPI( this); // new UDapi( this);
+            this.ude.loadScript( "ud-view-model/udapi.js", "window.ud.api = new UDapi( window.ud);", "UDapi", "UDapi");
+        else this.api = setupAPI( this); // new UDapi( this);
 
         // UDE - UniversalDocEditor
         /*if ( typeof process == 'object') this.ude =  new window.UDE( this.topElement, this);
@@ -299,6 +285,11 @@ class UniversalDoc
    
    initialise() {
         // console.log( this.api.json.value( UD_exTagAndClassInfo, 'p'), UD_exTagAndClassInfo[ 'div.video']);
+        // Animate banner for version
+        let banner = this.dom.element( 'banner');
+        banner.style.backgroundColor = "rgb( 241,208,208,1)";
+        // setTimeout( function() {  banner.style.backgroundColor = "rgb( 208,234,241,1)";}, 2000);
+        setTimeout( function() {  banner.style.backgroundColor = "rgb( 208,234,241,1)";}, 2000);        
         // Initialise elements
         let elements = this.dom.elements( '*', this.topElement);
         let elLen = elements.length;
@@ -346,7 +337,9 @@ class UniversalDoc
                     className += ' active';
                    
                 }
-                let viewCtrl = API.dom.insertElement( 'span', viewName, { id: switchName, class:className, onclick:click, title:viewName}, viewSelector, true, true);
+                let label = viewName;
+                if ( label.length > 15) label = viewName.substring( 0, 6) + '...' + viewName.substring( label.length-6);
+                let viewCtrl = API.dom.insertElement( 'span', label, { id: switchName, class:className, onclick:click, title:viewName}, viewSelector, true, true);
                 // Check view's content if empty
                 // 2DO BUG View is list entry in outline, use viewName to find real view, rename variables
                 let viewEl = this.dom.elementByName( viewName);
@@ -358,10 +351,15 @@ class UniversalDoc
             }            
             API.dom.insertElement( 'span', "+", { id: "newView", class:"tab left", onclick:"API.addView();"}, viewSelector, true, true);
         } else if ( viewSelector) { viewSelector.classList.add( 'hidden');}
-        // SHow default or app part according to screen width
+        // Show default or app part according to screen width
+        debug( {level:1}, "Default view " + currentPartName + ' ' + appViewName);
         if (  appViewName && window.innerWidth < this.ude.minWidthFloater) API.switchView( appViewName);
         else API.switchView( currentPartName);
-        // Done in SwitchView API.buildManagePart();
+        // Patch 240318 to run app script once loaded on default view
+        let viewScript = 'view_load_' + currentPartName;
+        setTimeout( function() {
+            if ( typeof global[ viewScript] == "function") global[ viewScript]();
+        }, 1000);
         // Trial Tablet : hide header if staging systematic
         /*
         // Auto paging trial on h2
@@ -763,6 +761,7 @@ class UniversalDoc
                 let windowH = window.innerHeight;            
                 let content = this.dom.element( "content");
                 let scroll = this.dom.element( "scroll");
+                let viewSel = this.dom.element( 'view-selector');
                 if ( content && scroll) {
                     let heightM = scroll.offsetHeight;
                     let heightC = content.offsetHeight;
@@ -772,7 +771,10 @@ class UniversalDoc
                     if ( heightC != targetH && this.dom.attr( scroll, "computed_overflowY") == "scroll") { 
                         // Setup content and scroll height
                         content.style.height = targetH + "px";
-                        scroll.style.height = ( targetH -  scroll.style.marginTop) + "px"; // 22 ViewSelector and scroll margin -20
+                        let scrollH = targetH;
+                        scrollH -= ( this.dom.attr( scroll, 'computed_marginTop') + this.dom.attr( scroll, 'computed_marginBottom'));
+                        scrollH -= ( viewSel) ? viewSel.offsetHeight : 0;
+                        scroll.style.height = scrollH + "px";
                     } else if ( heightC != targetH){
                         // Setup content height                    
                         let doc = this.dom.element( 'document');
@@ -954,8 +956,8 @@ class UniversalDoc
         // Send request via UDAJAX;
         this.udajax.serverRequest( call, "GET", "", context);
         // 2DO composite elements may require a 2nd fetch unless update handles 2 datasets 
-        // Show element as busy
-        element.classList.add( 'busy');
+        // Show editable elements as busy
+        if ( this.dom.isEditable( element)) element.classList.add( 'busy');
         //this.ude.dom.attr( element, 'ude_edit', "Off");
         this.dom.attr( element, 'ud_dsent', this.ticks);        
 
@@ -971,14 +973,19 @@ class UniversalDoc
     updateElement( element, returnedDataString)
     {
         if ( !this.dom.isEditable( element)) { 
+            console.log( element.id + " is not editable so cannot be updated");
             return;
         }
         let returnedData;
-        try { returnedData = JSON.parse( returnedDataString);} 
-        catch { debug( {level:1}, "Non JSON server response", returnedDataString); return false;}
-        if ( !element || !element.id) debug( {level:1, return: false}, "Can't update element", element);
-        if ( returnedData.nname != element.id) debug( {level:1, return: false}, "bad record from server", element.id, returnedData);
+        try { 
+            returnedData = JSON.parse( returnedDataString);
+        } catch { 
+            return debug( {level:1, return:false}, "Non JSON server response", returnedDataString);
+        }
+        if ( !element || !element.id) return debug( {level:1, return: false}, "Can't update element", element);
+        if ( returnedData.nname != element.id && element.id.indexOf( 'MANAGE_') == -1) return debug( {level:1, return: false}, "bad record from server", element.id, returnedData);
         let fieldsToChange = this.dom.attr( element, 'ud_fields'); 
+        let currentType = this.getDBtype( element);
         if ( returnedData.newElement)
         {
             // Newly inserted element
@@ -994,7 +1001,6 @@ class UniversalDoc
         {
             // Update existing element if changed by another user
             this.dom.cursor.save();
-            let currentType = this.getDBtype( element);
             if ( currentType == returnedData.stype)
             {
                 // Same type of element returned as that in DOM so update content & class 
@@ -1083,9 +1089,11 @@ class UniversalDoc
                 if ( ( this.mode == "model1" || this.mode == "model") && this.isDirListing()) {
                     oid = oidTop.replace( "--{OIDPARAM}", "");
                     if ( oid != "UniversalDocElement--21") oid += "-21";
-                }                    
-                let lastCallTime = Math.round( Date.now()/1000 - this.maxTicksToFetch/10);
-                let uri = "/webdesk/"+oid+"/AJAX_getChanged/?lastTime="+lastCallTime;
+                }                   
+                let now = Date.now()/1000;
+                let lastCallTime = Math.round( now - this.maxTicksToFetch/10);
+                if ( this.serverTime && Math.abs( lastCallTime - this.serverTime) > 10) lastCallTime += ( this.serverTime - lastCallTime);
+                let uri = '/' + UD_SERVICE + '/' + oid + '/AJAX_getChanged/?lastTime=' + lastCallTime;
                 context = { element:this.topElement, ud:this};
                 let me = this;
                 this.udajax.serverRequest( uri, "GET", "", context, me.syncWithServer);
@@ -1109,12 +1117,12 @@ class UniversalDoc
                 if ( element) {
                     // Existing element
                     // 2DO Check oid ?
-                    if ( name == "UD_user")
-                    {
+                    if ( name == "UD_user") {
                         // Update session status
                         let user = ud.dom.element( name).textContent;
                         if ( changeRecord.content != user) ud.networkStatus.session = false;
                         else ud.networkStatus.session = true;
+                        if ( typeof changeRecord.time != "undefined") ud.serverTime = changeRecord.time;
                     }
                     else if ( changeRecord.oid == "__DELETED") ud.viewEvent( "server remove", element);                   
                     else if ( changeRecord.ticks >= ud.dom.attr( element, 'ud_dupdated')) {
@@ -1566,7 +1574,7 @@ class UniversalDoc
         this.udajax.serverRequest( call, "POST", postData, context, null); 
         // Setup waiting         
         let T = $$$.getShortcut( "translateTerm");
-        let html = '<div style="text-align:center"><img src="/upload/3VUvtUCVi_processing.gif"><br>';
+        let html = '<div style="text-align:center"><img src="' + UDE_processingIcon + '"><br>';
         html += T( 'Initialisation de la page') + ' '+ T('avec') + ' ' + modelName;
         html += '.</div>';
         this.topElement.innerHTML = html;
@@ -1605,7 +1613,7 @@ class UniversalDoc
         // Send request to server
         this.udajax.serverRequest( call, "POST", postData, context, null); 
         // Setup waiting         
-        let html = '<div style="text-align:center"><img src="/upload/3VUvtUCVi_processing.gif">';
+        let html = '<div style="text-align:center"><img src="' + UDE_processingIcon + '">';
         html += "<br>Création d'un repertoire avec "+modelName+".</div>";
         this.topElement.innerHTML = html;
         window.scrollTo( 0, 0);
@@ -2052,17 +2060,23 @@ if ( typeof process == 'object')
         // console.log( Date.now());
         var envMod = require( '../tests/testenv.js');
         envMod.load();
+        //TEST_requireSetup( [ 'modules/connectors/udeconnector']);        
         // Setup our UniversalDoc object
         ud = new UniversalDoc( 'document', true, 133);
+        const connMod = require( '../modules/connectors/udeconnector.js');
+        connMod.init();
+        const drawMod = require( '../modules/editors/udedraw.js');
        //console.log( API);
         //console.log( API.pageBanner);        
-        console.log( "Test 1 : retrieve content from integrated page");
-        console.log( ud.ude.dom.value( "B0100000001000000M...textContent"));
+        let test = "Test 1 : retrieve content from integrated page";
+        if ( ud.ude.dom.value( "B0100000001000000M...textContent") == "Hello big world") console.log( test + ': OK');
+        else console.log( test + ': KO ' + ud.ude.dom.value( "B0100000001000000M...textContent"));
         // updateTest
-        ud.updateElement( ud.dom.element('B0100000001000000M'), '{"stype":10, "nstyle":"", "tcontent":"Hello again", "result":"", "users":"22", "modifiableBy":202}');
+        ud.updateElement( 
+            ud.dom.element('B0100000001000000M'), 
+            '{"stype":10, "nname" : "B0100000001000000M", "nstyle":"", "tcontent":"Hello again", "result":"", "users":"22", "newElement": 0, "modifiableBy":202}');
         if ( ud.dom.value( "B0100000001000000M...textContent") == "Hello again") console.log( "Test update: OK");
-        else console.log( "Test update: KO");
-        // Insert test
+        else console.log( "Test update: KO " + ud.dom.value( "B0100000001000000M...textContent"));
         TEST_serverSaving = false;
         let before = API.dom.element( "B010000000500000M");
         let el = document.createElement( "p");

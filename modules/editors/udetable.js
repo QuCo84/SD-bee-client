@@ -22,6 +22,7 @@ class UDEtable {
     ude;
     widths = null;
     idsCleared = [];
+    mouseDownElement = null;
     
     // Set up table editor
     constructor( dom, ude)
@@ -31,7 +32,8 @@ class UDEtable {
         if ( typeof API != "undefined" && API) 
             API.addFunctions( this, [ 
                 "updateTable", "getRow", "matchRow", "findRows", "findFirstRow", "getFirstRow", 
-                "writeCell", "emptyTable", "tableColumns"
+                "writeCell", "updateRow", "emptyTable", "tableColumns", "insertRow", "insertColumn", 
+                "removeRow", "removeColumn"
             ]);
     } // UDEtable.construct()
     
@@ -145,13 +147,17 @@ class UDEtable {
                     cell.setAttribute( "ude_place", fillText);
                     cell.textContent = fillText;
                 }
+                // Manage formulae
                 if ( this.dom.attr( cell, "ude_formula")) this.ude.calc.updateElement( cell, i+1, recurrent);  
-                else  if ( rowModel && this.dom.attr( rowModel.cells[ iCol], "ude_formula")) {
+                else  if ( cell.textContent == '...' && rowModel && this.dom.attr( rowModel.cells[ iCol], "ude_formula")) {
                     // 2DO =use( { parent:table.id, child:thead tr[nth-child(2)] td[nth-child( iCol)]});
                     this.dom.attr( cell, "ude_formula", this.dom.attr( rowModel.cells[ iCol], "ude_formula"));
                     this.ude.calc.updateElement( cell, i+1, recurrent);
                     this.dom.attr( cell, "ude_formula", "__CLEAR__");
-                }             
+                }   
+                // Manage cell class
+                /* Could do this is json create/readTable, if td class read then filter if same as model */
+                if ( rowModel && rowModel.cells[ iCol].className && !cell.className) cell.className = rowModel.cells[ iCol].className;
             }  // end cell loop
             // Row formulas
             if ( this.dom.attr( row, "ude_rowidformula")) 
@@ -225,7 +231,7 @@ class UDEtable {
         if ( json) {
             // Convert table object's JSON to HTML
             // 2DO add element's styles to JSON
-            let editZone = this.dom.JSONput( json, bind);
+            let editZone = this.dom.JSONput( json, bind, '', this.dom.keepPermanentClasses( element.className, true));
             element.appendChild( editZone);
             edTable = this.dom.element( json.meta.name);
             // DONE LATER Update cells with formulas
@@ -311,6 +317,7 @@ class UDEtable {
         let name = suggestedName.replace(/ /g, '_').replace(/'/g,'_').replace(/"/g, '');
         let objectName = name + "_object";
         // Data
+        // 2DO get default value from register
         let fillText = API.getParameter( 'computingText');;
         let objectData = { 
             meta:{ type:"table", name:name, zone:name+"editZone", caption:suggestedName, captionPosition:"top"}, 
@@ -601,26 +608,139 @@ class UDEtable {
      */
     
     // User-generated event 
-    inputEvent( e, element)
+    inputEvent( e, element=null)
     {    
         let processed = false;
-        let source = element; // e.source;
+        let source = ( element) ? element : e.target;
         let saveable = this.dom.getSaveableParent( element);
         let displayable = this.dom.getParentWithAttribute( 'ude_bind', element);
         let content = source.innerHTML;
-        let event = e.event;
+        let event = ( typeof e.event != "undefined") ? e.event : e.type;
         let row = ( ["TD","TH"].indexOf( source.tagName) > -1) ? source.parentNode : ( source.tagName == "TR") ? source : null;
-        let cell = null;
-        
+        let table = ( row) ? row.parentNode.parentNode : null;
+        let cell = ( ["TD","TH"].indexOf( source.tagName) > -1) ? source : null;      
         switch ( event)
         {
             case "click" :
+                // Conditional display of header rows : rowModel
                 if ( row && row.parentNode.tagName == 'THEAD' && row == row.parentNode.childNodes[0]) {
                     let model = row.nextSibling;
                     if ( model) model.style.display = "table-row";                    
                 } else if (row) {
                     let model = row.parentNode.parentNode.childNodes[0].childNodes[1];
                     if ( model && row != model) model.style.display = "none"; 
+                }
+                this.dom.cursor.fetch();
+                // Listen to mouse moves
+                if ( table && cell) {
+                    let me = this;
+                    table.addEventListener( "mousedown", function (event) { me.inputEvent( event);});
+                    table.addEventListener( "mouseup", function (event) { me.inputEvent( event);});
+                    table.addEventListener( "mousemove", function (event) { me.inputEvent( event);});
+                    //table.addEventListener( "mouseout", function (event) { this.inputEvent( event);});
+                }
+                break;
+            case "click outside" :
+                if ( table) {
+                    table.removeEventListener( "mousedown", function (event) { me.inputEvent( event);});
+                    table.removeEventListener( "mouseup", function (event) { me.inputEvent( event);});
+                    table.removeEventListener( "mousemove", function (event) { me.inputEvent( event);});
+                    this.clearSelected( table);
+                }
+                break;
+            case "mousedown" :
+                if ( !table || !cell) break;
+                // Store selected cell & clear
+                this.mouseDownElement = this.getRowAndColumn( table, cell);
+                this.clearSelected( table);
+                // Don't marj a sprocessed so selection inside cell is still possible
+                /*
+                cell.classList.add( 'selected');
+                processed = true;
+                if ( this.dom.cursor.HTMLelement != cell) this.dom.cursor.setAt(cell, 0);
+                */
+                break;
+            case "mousemove" :
+                if ( !table || !cell || !this.mouseDownElement) break;
+                if ( cell != this.mouseDownElement.cell) {
+                    // At least 2 cells selected                
+                    // Add selected class to cells
+                    let cellCoord = this.getRowAndColumn( table, cell);
+                    this.setSelected( table, this.mouseDownElement, cellCoord);   
+                    this.dom.cursor.set( this.mouseDownElement.cell, this.dom.cursor.textOffset);
+                    processed = true;
+                }                
+                // Scroll table management
+                // if table is scrollable                
+                let tbody = $$$.dom.element( 'tbody', table);              
+                console.log( tbody.scrollTop, cell.offsetTop);
+                let step = 20;
+                if ( cell.offsetTop > ( tbody.scrollTop + this.dom.attr( tbody, 'computed_height') - step)) tbody.scrollTop += step;
+                if ( cell.offsetTop < ( tbody.scrollTop + 2*step) ) tbody.scrollTop -= step;
+                break;    
+            case "mouseup" :
+                if ( !table || !cell ) break;  
+                this.mouseDownElement = null; 
+                if ( this.dom.elements( '.selected', table).length)  { //if cell.classList.contains( 'selected')                        
+                    processed = true;
+                }
+                break;    
+            case "Key Backspace" : 
+            case "Key Delete" :
+                if ( !table || !cell) break;
+                if ( cell.classList.contains( 'selected'))  {
+                    let selected = this.dom.elements( '.selected', table);   
+                    let safe = 5;                                     
+                    while ( selected.length && --safe) {
+                        // If a complete row is selected remove it
+                        let walk = selected[0];
+                        row = walk.parentNode;
+                        if ( selected.indexOf( walk) == -1) break;
+                        while ( ( walk = walk.nextSibling)) if ( selected.indexOf( walk) == -1) break;
+                        if ( !walk) {                            
+                            walk = selected[0];
+                            while ( ( walk = walk.previousSibling)) {
+                                // Leave loop if not selected
+                                if ( selected.indexOf( walk) == -1) break;
+                                // Remove element from selection list
+                                //selected.splice( selectedi, 1);
+                            }
+                            if ( !walk) {
+                                this.removeRow( table, row);
+                                processed = true;
+                            }                            
+                        }
+                        selected = this.dom.elements( '.selected', table);
+                        // If a complete column is selected remove it
+                        // let cols = this.getColumn( table, selected[0]);
+                        let cols = this.getColumn( table, cell);
+                        for ( let coli=0; coli < cols.length; coli++) {
+                            let selectedi = selected.indexOf(  cols[ coli]);
+                            // Leave loop if not selected
+                            if ( selectedi == -1) break;
+                            // Remove element from selection list
+                            selected.splice( selectedi, 1);
+                            // If last column then remove column
+                            if ( coli == ( cols.length - 1)) {
+                                this.removeColumn( table, cell);
+                                processed = true;
+                            }
+                        }
+                        // Rebuild list of selected cells
+                        //selected = this.dom.elements( '.selected', table);
+                        if ( !processed) {
+                            // Otherwise delete content 
+                            let dummy = API.getParameter( "dummyText");
+                            for ( let selecti=0; selecti < selected.length; selecti++) {
+                                selected[ selecti].textContent = dummy;
+                            }
+                            selected = [];
+                            processed = true;                            
+                        }
+                        
+                    }                    
+                    // Clear selected if event processed
+                    if ( processed) this.clearSelected( table);
                 }
                 break;
             case "change":
@@ -663,9 +783,11 @@ class UDEtable {
             case "insert row" :
             case "newline" : 
                 // New line
+                let tablec = this.getRowAndColumn( table, cell);
+                let beforeOrAfter = ( tablec.column > 1);
                 // 2DO Split current line, replace mode 
-                if ( e.data) { row = this.insertRow( null, -1, e.data);}
-                else { row = this.insertRow( null, -1);} // empty row 
+                if ( e.data) { row = this.insertRow( null, -1, e.data, beforeOrAfter);}
+                else { row = this.insertRow( null, -1, null, beforeOrAfter);} // empty row 
                 let updateEv = this.dom.udjson.value( e, 'update');
                 if ( updateEv == "" || updateEv) { this.update( row.parentNode.parentNode.id);}            
                 if ( this.dom.getParentAttribute( "", "ude_autosave", this.dom.cursor.HTMLelement) != "Off")
@@ -677,26 +799,60 @@ class UDEtable {
                this.dom.cursor.set();
                processed = true;
                break;
-            case "paste" : { // Paste text to current cell
+            case "paste" : { // Paste to current cell
                 let cursor = this.dom.cursor;
                 // Get text element of cell where cursor is positionned and offset in it's content
-                cell = cursor.textElement;
+                cell = cursor.textElement;                 
                 let offset = cursor.textOffset;
+                let body = cell.parentNode.parentNode.parentNode;
+                let table = body.parentNode; 
                 // Get cell's content
                 let ctext = cell.textContent;
-                let text = e.data;
-                // Modify content
-                if ( cursor.selectionMultiNode) {
+                let text = e.data;                
+                if ( text.indexOf( ';') > -1) {
+                    // Text is CSV syntax ie fill multiple cells
+                    let row = cell.parentNode.parentNode;
+                    // Next 2 lines should be a fct
+                    let rowNo = 0;
+                    while ( (row = row.previousElementSibling)) rowNo++;
+                    let col = cell;
+                    // idem
+                    let colNo = 0;                   
+                    while ( (col = col.previousElementSibling)) colNo++;                         
+                    let nbRows = body.rows.length;             
+                    let rows = text.split( "\n");
+                    let lastCellModified = null;
+                    for ( let rowi=0; rowi < rows.length; rowi++) {
+                        let row = rows[ rowi];
+                        let cellValues = row.split( ';');
+                        if ( !colNo && rowNo >= nbRows) this.insertRow( table.id, rowNo - 1, row, true, true);
+                        else {
+                            for ( let coli=colNo; coli < cellValues.length; coli++) {
+                                let cellValue = cellValues[ coli];
+                                lastCellModified = body.rows[ rowNo].cells[ coli];
+                                lastCellModified.innerHTML = cellValue;                            
+                            }
+                        }
+                        colNo = 0;
+                        rowNo++;
+
+                    }
+                    this.dom.cursor.setAt( lastCellModified, 10000);
+                } else if ( cursor.selectionMultiNode) {
                     // Multiple nodes selected 
                     // 2DO delete or empty cells ? could be spans inside cell
                 } else if ( cursor.selectionInNode) {
                     // Text inside cell is selected
                     ctext = ctext.substr( 0, offset)+text+ctext.substr(cursor.focusOffset);
+                    cell.textContent = ctext;
                 } else {
+                    // Insert at cursor
                     ctext = ctext.substr( 0, offset)+text+ctext.substr(offset);
+                    cell.textContent = ctext;
+                    this.dom.cursor.setAt( element, offset+text.length);
                 }
-                // Update cell
-                cell.textContent = ctext;
+                // Save
+                this.ude.setChanged( table);
                 processed = true;
             break;}
             case "endPaste" :
@@ -720,7 +876,7 @@ class UDEtable {
                 this.dom.cursor.fetch();
                 let cursor = this.dom.cursor;
                 // Expetcting selection to be on whole HTML elements
-                if ( cursor.textElement != null) return false;
+                if ( cursor.textElement == null) return false;
                 let startElement = cursor.HTMLelement;
                 let endElement = cursor.focusElement;
                 // let offset = cursor.textOffset;
@@ -737,7 +893,7 @@ class UDEtable {
                 if ( cellStart == -1) cellStart = 0;
                 let cellEnd = cells.length -1;                
                 for ( let celli=cellStart; celli <= cellEnd; celli++) text += cells[ celli].textContent+";";
-                text = text.substring( 0, text.length - 2)+"\n";
+                text = text.substring( 0, text.length - 1)+"\n";
                 while ( walkRow && walkRow != endRow && safe--)
                 {
                     // Next line
@@ -747,11 +903,18 @@ class UDEtable {
                     cellStart = 0;
                     cellEnd = cells.length -1;
                     if ( walkRow == endRow) cellEnd = [].slice.call(cells).indexOf( endElement); 
-                    if ( cellEnd == -1) cellEnd = cells.length -1;                     
+                    if ( cellEnd == -1) cellEnd = cells.length -1;                
+                    // 2DO if , or ; then ""     
                     for ( let celli=cellStart; celli <= cellEnd; celli++) text += cells[ celli].textContent+";";
-                    text = text.substring( 0, text.length - 2)+"\n";
-                 }
-                // Target is an object to store clip content & type
+                    text = text.substring( 0, text.length - 1)+"\n";
+                }                
+                text = text.substring( 0, text.length - 1);
+                // Store in clipboard
+                if ( clipboarder) {
+                    let clip = clipboarder.createClip( 'text', text); //, clipGroup);
+                    clipboarder.saveClip( clip); //, deleteCopied); // save in base if element is being deleted                
+                }
+                // Store in event target object
                 e.target.clipContent = text;
                 e.target.clipType = "text";
                 processed = true;
@@ -800,7 +963,7 @@ class UDEtable {
                 break;
             case "save" :
                 let target = e.target;            
-                processed = this.prepareToSave( displayable, target);            
+                if ( typeof target != "undefined") processed = this.prepareToSave( displayable, target);            
                 break;
             case "setValue" : {
                 let path = e.key;
@@ -846,6 +1009,9 @@ class UDEtable {
         else return debug( {level:5, return:null}, "No cursor or no cursor at table");
         if (!table) return debug( {level:5, return:"ERR: no table "+tableId}, "No table", tableId);
         let body = table.getElementsByTagName('tbody')[0];
+        // Find row model        
+        let model = table.rows[1].cloneNode(true);
+        model.style.display = "";
         // Interpret index and find ROW where to insert
         let row = null;  // DOM will use cursor in this case
         if ( index > -1) {
@@ -858,11 +1024,19 @@ class UDEtable {
         else {
             // 2DO check if last row is empty, use it
             // Use last row
-            row = body.rows[ body.rows.length - 1];
+            index = body.rows.length;
+            row = body.rows[ index - 1];
+            // Modify row if it is empty
+            if ( !row.textContent.match( /[^.]+/) ) {                
+                // Insert new row with clone of model & remove current one
+                this.dom.insertElement( 'tr', model, {}, row, true);
+                row.remove();    
+                // Update last row
+                this.updateRow( tableId, index, data);
+                return true;
+            }            
         }
-        // Find row model        
-        let model = table.rows[1].cloneNode(true);
-        model.style.display = "";
+        
         // if ( !model.classList.contains( 'rowModel')) return debug( {level:2, return:"ERR: no model in "+tableId}, "No model", table);
         // Insert row via DOM
         let newRow = (row) ? this.dom.insertElement( 'tr', model, {}, row, beforeOrAfter) : this.dom.insertElement( 'tr', model, {}, body, beforeOrAfter, true); 
@@ -900,6 +1074,12 @@ class UDEtable {
                 let cellContent = data[ colName];
                 let cell = newRow.cells.item( coli);
                 cell.innerHTML = cellContent;
+                if ( cellContent[0] == '=') {
+                    // A formula so update ude_formula attribute and compute result
+                    var formula = cellContent.substr( 1); 
+                    this.dom.attr( cell, 'ude_formula', formula);
+                    this.ude.calc.updateElement( cell); 
+                }                
                 if ( cellContent.length && placeholder) this.dom.attr( cell, "ude_place", cellContent); // 2DO class placeholding ?
             }
         }
@@ -959,11 +1139,11 @@ class UDEtable {
         return rows[0].cells[ colIndex+1]; // table; 
     } // UDEtable.insertColumn()
     
-    deleteRow( tableId, index)
-    {
+    removeRow( tableOrId, rowOrIndex) { return this.deleteRow( tableOrId, rowOrIndex);}
+    deleteRow( tableOrId, rowOrIndex)  {
         let table = null;
         let cell = null;
-        if ( tableId) table = document.getElementById( tableId);
+        if ( tableOrId) table = this.dom.element( tableOrId);
         else if ( this.dom.cursor.HTMLelement)
         {
             table = this.dom.getParentAttribute( "table", "_element", this.dom.cursor.HTMLelement); // .parentNode.parentNode;
@@ -971,8 +1151,9 @@ class UDEtable {
             if (cell.tagName.toLowerCase() != "td") return debug( {level:2}, "Can't insert TR as cursor not on TD", this.cursor);
         }    
         else return debug( {level:5, return:null}, "No cursor or no cursor at table");
-        if (!table) return debug( {level:5, return:null}, "No table", tableId);
+        if (!table) return debug( {level:5, return:null}, "No table", tableOrId);
         // Interpret index and find ROW to remove
+        let index = ( typeof rowOrIndex == 'object') ? Array.prototype.indexOf.call( rowOrIndex.parentNode.rows, rowOrIndex) : rowOrIndex - 1;
         let row = null;  // DOM will use cursor in this case
         if ( index > -1) 
         {
@@ -985,8 +1166,8 @@ class UDEtable {
         else if ( cell) row = cell.parentNode;
         else return debug( {level:2, return : null}, "Table specified but not index");
         // Get Next and previous cells
-        let nextRow = row.previousSibling;
-        let prevRow = row.nextSibling;
+        let nextRow = row.nextSibling;
+        let prevRow = row.previousSibling;
         let nextCell = null;
         if ( nextRow) nextCell = nextRow.cells[0];   // 1st editable cell of nextRow
         let prevCell = null;
@@ -994,7 +1175,7 @@ class UDEtable {
         // Remove row
         row.remove();
         // Update table
-        this.updateTable( tableId);        
+        this.updateTable( table.id);        
         // Return cell where to place cursor
         if ( nextCell) return nextCell; else return prevCell;
     } // UDEtable.deleteRow()
@@ -1018,10 +1199,84 @@ class UDEtable {
         }
     } 
     
-    deleteColumn( tableId, colIndex)
-    {
-        
-    } // UDEtable.deleteColumn()
+    /**
+	* Clear selected class
+	* @param {string} tableOrId Table element or its id
+	* @param {integer] index Index of item to delete
+	*/
+    clearSelected( tableOrId) {
+        let table = this.dom.element( tableOrId);
+        if ( table && table.tagName.toLowerCase() != "table") table = this.dom.elements('table', table)[0];
+        if (!table) return debug( {level:1, return:"ERR: no table "+tableOrId}, "No table", tableOrId);        
+        // Remove selected class from all cells
+        let rows = table.rows;
+        for ( let rowi=0; rowi < rows.length; rowi++) {
+            let cells = rows[ rowi].cells;
+            for ( let celli=0; celli < cells.length; celli++) cells[ celli].classList.remove( 'selected');
+        }
+        return true;    
+    } 
+
+    /**
+	* Set selected class
+	* @param {string} tableOrId Table element or its id
+	* @param {integer] index Index of item to delete
+	*/
+    setSelected( tableOrId, fromCell, toCell) {
+        let table = this.dom.element( tableOrId);
+        if ( table && table.tagName.toLowerCase() != "table") table = this.dom.elements('table', table)[0];
+        if (!table) return debug( {level:1, return:"ERR: no table "+tableOrId}, "No table", tableOrId);
+        // Clear selected
+        this.clearSelected( table);
+        // Set from and to row/column
+        let fromRow = fromCell.row;
+        let toRow = toCell.row;
+        let fromCol = fromCell.column;
+        let toCol = toCell.column;
+        if ( fromRow > toRow) {
+            toRow = fromRow;
+            fromRow = toCell.row;
+        }
+        if ( fromCol > toCol) {
+            toCol = fromCol;
+            fromCol = toCell.column;
+        }
+        // Add selected class to cells
+        let rows = table.rows;
+        for ( let rowi=fromRow; rowi <= toRow; rowi++) {
+            let cells = rows[ rowi].cells;
+            for ( let celli=fromCol; celli <= toCol; celli++) cells[ celli].classList.add( 'selected');
+        }
+        return true;    
+    } 
+
+    /**
+	* @api {JS} $$$.removeColumn(tableid,colIndex) Remove a column from a table
+	* @apiParam {string} tableId Id of table element
+	* @apiParam {integer} colIndex Index of column to delete starting with 1
+    * @apiSuccess {boolean} true
+    * @apiError  {string}  Error message
+    * @apiGroup Tables
+	*/
+    removeColumn( tableOrId, cellOrIndex)  {        
+        // Find table, head & body
+        let table = this.dom.element( tableOrId);
+        if ( table && table.tagName.toLowerCase() != "table") table = this.dom.elements('table', table)[0];
+        if (!table) return debug( {level:1, return:"ERR: no table "+tableOrId}, "No table", tableOrId);        
+        let thead = this.dom.elements( 'thead', table)[0];
+        let tbody = this.dom.elements( 'tbody', table)[0];
+        if ( !thead || !tbody ) return debug( {level:5, return:"ERR: no head or body in "+id}, "No head or body", table);       
+        // Check column index
+        let colIndex = ( typeof cellOrIndex == 'object') ? Array.prototype.indexOf.call( cellOrIndex.parentNode.cells, cellOrIndex) : cellOrIndex - 1;
+        if ( !colIndex || colIndex > thead.rows[0].cells.length) 
+            return debug( {level:5, return:"ERR: bad column index"+colIndex}, "Bad column index", colIndex); 
+        if ( thead.rows[0].cells.length == 1) 
+            return debug( {level:5, return:"ERR: can't remve last column, delete table instead"}, "Last column reove, delete table instead");     
+        // Remove column
+        let rows = table.rows;
+        for ( let rowi=0; rowi < rows.length; rowi++) rows[ rowi].deleteCell( colIndex);
+        return true;        
+    }
     
     setColumnWidths( tableId, widths)
     {
@@ -1077,16 +1332,12 @@ class UDEtable {
         return false;
     } //UDEtable.matchRow()
 
-   /**
-    * Return a list of matching rows from an HTML table
-    * @param {string} tableId Id of HTML table
-    * @param {string} selector Regular expression to match concanted row
-    * @return {integer[]} List of row nos
+    /*
     * @api {JS} API.findRows(tableId) Get matching rows' no
     * @apiParam {string} tableId Id of HTML table
     * @apiParam {string} selector Regular expression to match concanted row
     * @apiSuccess {[integer]} return List of row nos
-    * @apiGroup Elements
+    * @apiGroup Tables
     */
     findRows( tableId, selector)
     {
@@ -1119,16 +1370,12 @@ class UDEtable {
         return r;
     } // UDEtable.findRows()
  
-   /**
-    * Return index of first matching row
-    * @param {string} tableId Id of HTML table
-    * @param {string} selector Regular expression to match concanted row
-    * @return {integer} Index of first matching row
+    /* 
     * @api {JS} API.findFirstRow(tableId,selector) Get 1st matching row's index
     * @apiParam {string} tableId Id of HTML table
     * @apiParam {string} selector Regular expression to match concanted row
     * @apiSuccess {integer} return Index of first matching row
-    * @apiGroup Elements
+    * @apiGroup Tables
     */
     findFirstRow( tableId, selector)
     {
@@ -1144,19 +1391,12 @@ class UDEtable {
     }
    
    /**
-    * Return sums of a column in a row set by a value of a key column
-    * @param {string} tableId Id of HTML table
-    * @param {string} key Column name of key
-    * @param {string} valueToAdd Column name of value 
-    * @param {integer} index of first row
-    * @param {integer} index of last row    
-    * @return [{integer}] Named list of sums
-    * @api {JS} API.sumsBy(tableId,valueToAdd,firstRow,lastRow) Column sums by a column value
+    * @api {JS} API.sumsBy(tableId,key,valueToAdd,firstRow,lastRow) Column sums by a column value
     * @apiParam {string} tableId Id of HTML table
-    * @apiParam {string} key Column name of key
-    * @apiParam {string} valueToAdd Column name of value 
-    * @apiParam {integer} index of first row
-    * @apiParam {integer} index of last row    
+    * @apiParam {string} key Column name used for grouping
+    * @apiParam {string} valueToAdd Column name used for value to cumulate
+    * @apiParam {mixed} firstRow index of first row or search expression
+    * @apiParam {mixed} lastRow index of last row or search expression   
     * @apiSuccess {object} return Named list of sums
     * @apiGroup Tables
     */
@@ -1214,14 +1454,6 @@ class UDEtable {
     * @apiParam {mixed} selectors If string, row match expression,  if object then match with firstRow and lastRow attributes  
     * @apiSuccess {object} return Named list of sums
     * @apiGroup Tables
-    */
-   /**
-    * Return table of the sums of a column's values for rows grouped by the value of another column
-    * @param {string} tableId Id of HTML table
-    * @param {string} groupBy Column name to group by
-    * @param {string} valueToAdd Column name of value 
-    * @param {mixed} selectors If string, row match expression,  if object then match with firstRow and lastRow attributes   
-    * @return [{integer}] Named list of sums
     */
     sumsBy( tableId, groupBy, valueToAdd, selectors) {
         let r={};
@@ -1284,11 +1516,6 @@ class UDEtable {
     }    
    
    /**
-    * Return sum of a column in matching rows
-    * @param {string} tableId Id of HTML table
-    * @param {string} valueToAdd Column name of value 
-    * @param {string} rowMatch Reguar expression to select rows 
-    * @return {integer} Sum
     * @api {JS} API.sumsIf(tableId,valueToAdd,rowMatch) Column sum of selected rows
     * @apiParam {string} tableId Id of HTML table
     * @apiParam {string} valueToAdd Column name of value 
@@ -1329,11 +1556,6 @@ class UDEtable {
     } // UDEtable.sumsIf()
 
    /**
-    * Return concatenation of a column in matching rows
-    * @param {string} tableId Id of HTML table
-    * @param {string} valueToAdd Column name of value 
-    * @param {string} rowMatch Reguar expression to select rows 
-    * @return {string} Concantenation
     * @api {JS} API.concatIf(tableId,valueToAdd,rowMatch) Concatenation of a column for selected rows
     * @apiParam {string} tableId Id of HTML table
     * @apiParam {string} valueToAdd Column name of value 
@@ -1384,10 +1606,6 @@ class UDEtable {
     } // UDEtable.concatIf()
         
    /**
-    * Return a list of values in JSON format 
-    *  @param {string} tableId Id of table
-    *  @param {string} columnName Label of column
-    *  @return {string[]} List of text contents
     *  @api {JS} API.valueList(tableId,columnName) Get values from table 
     *  @apiParam {string} tableId Id of table
     *  @apiParam {string} columnName Label of column
@@ -1430,11 +1648,10 @@ class UDEtable {
     *  @apiParam {string} rowIndex Index of row
     *  @apiParam {boolean} html Returns HTML contents if true (default)
     *  @apiSuccess {object} return Object with columnName:value
-    *  @apiGroup Elements
+    *  @apiGroup Tables
     *
     */
-    getRow ( tableId, rowIndex, html = true)
-    {
+    getRow ( tableId, rowIndex, html = true, defaultAsEmpty = false) {
         let r={};
         // Get table, head and body
         let table = document.getElementById( tableId);
@@ -1463,10 +1680,15 @@ class UDEtable {
         for ( coli=0; coli < cols.length; coli++)
         {
             // Add to  result
-            r[ cols[coli]] = (html) ? cells[ coli].innerHTML : cells[ coli].textContent;
+            let cell = cells[ coli];
+            let input = this.dom.element( 'input', cell);
+            if ( input) r[ cols[coli]] = this.dom.attr( input, 'value');
+            else
+                r[ cols[coli]] = (html) ? cells[ coli].innerHTML : cells[ coli].textContent;
+            if ( defaultAsEmpty && this.dom.hasDefaultContent( cells[ coli])) r[ cols[coli]] = "";
             if ( cols[ coli] == "id") {
                 r[ 'oid'] = this.dom.attr( cells[ coli], 'ud_oid');
-            }
+            }           
             // Update DOM_accessedValues
             if ( typeof DOM_lastAccessedValues != "undefined") 
                 DOM_lastAccessedValues.push( row.cells[ coli]);
@@ -1476,13 +1698,10 @@ class UDEtable {
     } // UDEtable.getRow()
     
    /**
-    * Return the list of column names
-    * @param {string} tableId Id of HTML table
-    * @return {string[]} List of column names
     * @api {JS} API.tableColumns(tableId) Get matching rows' no
     * @apiParam {string} tableId Id of HTML table
     * @apiSuccess {[integer]} return List of row nos
-    * @apiGroup Elements
+    * @apiGroup Tables
     */
     tableColumns( tableId)
     {
@@ -1507,6 +1726,39 @@ class UDEtable {
         return cols;
     } // UDEtable.tableColumns()
 
+    /**
+    * @api {JS} $$$.getColumn(tableOrId,cell) Get all cells in column indicated by cell
+    * @apiParam {string} tableId Id of HTML table
+    * @apiSuccess {[integer]} return List of row nos
+    * @apiGroup Tables
+    */
+    getColumn( tableOrId, cellOrIndex) {
+        let r = [];
+        let table = $$$.dom.element( tableOrId);
+        let colIndex = ( typeof cellOrIndex == 'object') ? Array.prototype.indexOf.call(cellOrIndex.parentNode.cells, cellOrIndex) : cellOrIndex - 1;
+        let rows = table.rows;
+        for ( let rowi=0; rowi < rows.length; rowi++) {
+            // if ( rows[ rowi].classList.contains('rowModel')) continue;
+            let cells = rows[ rowi].cells;
+            r.push( cells[ colIndex]);
+        }
+        return r;  
+    }
+
+    /**
+    * @api {JS} $$$.getRowAndColum(tableOrId,cell) Return an object with cell,row index & column index
+    * @apiParam {string} tableId Id of HTML table
+    * @apiSuccess {[integer]} return List of row nos
+    * @apiGroup Tables
+    */
+    getRowAndColumn( tableOrId, cell) {
+        let table = $$$.dom.element( tableOrId);
+        if ( !table) return null;
+        let colIndex = Array.prototype.indexOf.call(cell.parentNode.cells, cell);
+        let rowIndex = Array.prototype.indexOf.call(  table.rows, cell.parentNode);
+        return { cell:cell, row:rowIndex, column:colIndex};  
+    }
+
    /**
     * @api {JS} API.writeCell(tableId,row,col) Write a cell's value
     * @apiParam {string} tableId Id of HTML table
@@ -1514,7 +1766,7 @@ class UDEtable {
     * @apiParam {string} column name
     * @apiParam {string} value, HTML or text to write to cell, if it starts with "=" it will be used as a formula
     * @apiSuccess {[integer]} return List of row nos
-    * @apiGroup Elements
+    * @apiGroup Tables
     */
     writeCell( tableId, row, col, value) {
         // Get table, head and body
@@ -1544,12 +1796,32 @@ class UDEtable {
         if ( coli == -1) return debug( {level:5, return:null}, "Can't find column", tableId, col);
         // Write cell
         tbody.rows[ rowIndex].cells[ colIndex].innerHTML = value;
+        if ( value[0] == '=') {
+            // A formula so update ude_formula attribute and compute result
+            let formula = value.substr( 1); 
+            let cell = tbody.rows[ rowIndex].cells[ colIndex];
+            this.dom.attr( cell, 'ude_formula', formula);
+            this.ude.calc.updateElement( cell); 
+        }     
         // Update object
         let editZone = table.parentNode;
         this.prepareToSave( editZone, $$$.dom.element( $$$.dom.attr( editZone, 'ude_bind')));
         return value;
     }
-
+    /**
+    * @api {JS} API.updateRow(tableId,row,data) Update several cells of a row
+    * @apiParam {string} tableId Id of HTML table
+    * @apiParam {mixed} row Index of row or key
+    * @apiParam {object} data, Named array of cells with new value
+    * @apiSuccess {boolean]} return True if no errors,false otherwise
+    * @apiGroup Elements
+    */
+    updateRow( tableId, rowIndex, data) {
+        for ( let key in data) {
+            if ( !this.writeCell( tableId, rowIndex, key, data[ key])) return false;
+        }
+        return true;
+    }
  
  } // JS class UDEtable
  

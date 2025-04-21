@@ -5,6 +5,7 @@ class UDE_menu {
     /* Parameters */
     minWidthFloater = 500;
     usePanel = true;
+    floatTO = 1000;
     /* variables */
     ude;
     dom;
@@ -21,6 +22,7 @@ class UDE_menu {
     editElement = null;         // Element being edited
     saveSideBar = "";           // Save side bar's content when using it for menu
     ideasHandler = null;        // Pointer to class which provides data for Ideas fct   
+    justClosedId = null;
 
       
     constructor( ude) {
@@ -31,7 +33,8 @@ class UDE_menu {
         if ( API) { API.addFunctions( this, [ 
             "displayMenu", "hideMenu", 
             "collapse", "expand", "closeBox", 
-            "displayCode", "displayConfig", "displayStyle", "displayLayout", "displayIdeas", "displayCloud", 
+            "displaySelectionActions",
+            "displayCode", "displayConfig", "displayStyle", "displayLayout", "displayIdeas", "displayCloud",             
             "displayCloudWeb", "displayCloudConnector", 
             "actionTableClick", "useActionData",
            //"getTagOrStyleLabel",
@@ -85,9 +88,12 @@ class UDE_menu {
                 }*/
                 
             }                       
-        }        
-        if ( this.box) { this.closeZone( this.box);} 
-        if ( this.editElement) { this.hide();}
+        } else {       
+            if ( this.box) { this.closeZone( this.box);} 
+            if ( this.editElement) { 
+                this.hide();
+            }
+        }
         // Get floating menu & element
         let floater = this.floater;
         if ( !floater || !element) { return false;}        
@@ -105,7 +111,7 @@ class UDE_menu {
             floater.innerHTML = "<h2>Editer un élément</h2>";
         }
         // Fill menu                
-        if ( selection) this.fillForSelection( element); else this.fill( element);
+        if ( false && selection) this.fillForSelection( element); else this.fill( element);
         // Copy element when using sidebar and display
         if ( this.useSide) { 
             // Copy element
@@ -162,7 +168,7 @@ class UDE_menu {
             ( this.floater && this.floater.style.display != "none")
             || this.box 
         ) {
-            let floatTO = ( this.box) ? 1000 : 100;
+            let floatTO = ( this.box) ? this.floatTO : 100;
             let floatOp = 0.5;
             if ( this.floater.style.opacity && !isNaN( this.floater.style.opacity)) floatOp = this.floater.style.opacity;
             if ( this.useSide) {
@@ -177,7 +183,7 @@ class UDE_menu {
             }
         }
     } // UDE_menu.tick()
-    rearmFloaterTO() { this.ticks = 0;}
+    rearmFloaterTO( ms = 0) { this.ticks = -ms;}
 
     getEditable( elementOrId, canBeMe = true) {
         let element = this.dom.element( elementOrId);
@@ -257,7 +263,15 @@ class UDE_menu {
                 this.editElement.parentNode.classList.remove( 'edcontainer');
             }
         }
-        if ( this.box) { this.closeZone( this.box, true); this.box = null;} 
+        if ( this.box) { 
+            this.closeZone( this.box, true);
+            this.box = null;
+        } 
+        // Generate leave configure event
+        if ( this.justClosedId == "_TMPconfig") {
+            let controlEvent = { event: "configure", type: "configure", action: "leave"};
+            this.ude.dispatchEvent( controlEvent, this.editElement);
+        }
         this.editElement = null;        
     } // UDE_menu.hide()   
     hideMenu() { return this.hide();}
@@ -402,6 +416,9 @@ class UDE_menu {
         */
         {
             // Panel
+            /*
+            if ude_menu != 'on' displayFirst
+            */
             let action = "$$$.displayStyle(" + selector + ");";
             let exTag = this.dom.attr( displayable, 'exTag');
             if ( [ 'div.html', 'div.filledZone', 'div.zoneToFill'].indexOf( exTag) > -1) action = "$$$.displayCode(" + selector +");";
@@ -498,7 +515,7 @@ class UDE_menu {
         let boxName = "panel-on-selection";
         let id = element.id + this.dom.childElements( element).length;
         let services = {};
-        if ( this.dom.textContent( 'UD_mode') == "edit3") services[ 'config'] = { tag:"a", onclick:"$$$.displayConfig('"+element.id+"');", value:"Config"};
+       // if ( this.dom.textContent( 'UD_mode') == "edit3") services[ 'config'] = { tag:"a", onclick:"$$$.displayConfig('"+element.id+"');", value:"Config"};
         services[ 'style'] = { tag:"a", onclick:"$$$.dom.styleSelection( null, 'styled', id);$$$.displayStyle( '');", value:"Style"};
         services[ 'button'] = { tag:"a", onclick:"$$$.dom.styleSelection( null, 'button', id);$$$.clickOn( '');", value:"Action"};
         services[ 'field'] = {tag:"a", onclick:"$$$.dom.styleSelection( null, 'field', id);$$$.clickOn( '');", value:"Champ"};
@@ -520,6 +537,7 @@ class UDE_menu {
         if ( typeof process != 'object') { this.addActionBox( elementOrSelector, boxName, boxName, content);}
         else { return content.innerHTML;}
     }
+    displaySelectionActions( elementOrSelector) { return this.panelOnSelection( elementOrSelector);}
     
     fillForSelection( elementOrSelector) {
         return this.panelOnSelection( elementOrSelector);
@@ -627,12 +645,7 @@ class UDE_menu {
     * @param {HTMLelement} configZone The configuration zone or absent/null for closing
     */    
     closeZone( configZone, restoreCursor=false) {
-        // return this.ude.floatConfig( configZone);
-        if ( configZone.id == "_TMPconfig") {
-            // Let element know it's leaving config mode
-            let controlEvent = { event: "configure", type: "configure", action:"leave"};
-            this.ude.dispatchEvent( controlEvent, this.editElement);
-        }
+        // return this.ude.floatConfig( configZone);    
         this.floater.style.display = "block";
         let page = configZone.parentNode;
         if ( this.dom.attr( page, 'exTag') == "div.page") {
@@ -698,6 +711,11 @@ class UDE_menu {
                 this.box.focus();
                 this.dom.makeVisible( boxName, 'scroll', 'top');
             }
+            // If config box then send configure event
+            if ( boxName == "_TMPconfig") {
+                let controlEvent = { event: "configure", type: "configure", action: "enter"};
+                this.ude.dispatchEvent( controlEvent, saveable);
+            }
         } else {
             this.dom.cursor.restore( this.cursorSave, true);  
         }
@@ -757,8 +775,14 @@ class UDE_menu {
     
     closeBox( restoreCursor = true) {
         if ( this.box) {
+            this.justClosedId = this.box.id;
             // Close box
-            this.closeZone( this.box, restoreCursor);
+            this.closeZone( this.box, restoreCursor);            
+            // Generate leave configure event
+            if ( this.justClosedId == "_TMPconfig") {
+                let controlEvent = { event: "configure", type: "configure", action: "leave"};
+                this.ude.dispatchEvent( controlEvent, this.editElement);
+            }            
             // Redisplay menu
             this.display( this.editElement);
         }        
@@ -769,17 +793,28 @@ class UDE_menu {
         let saveable = this.dom.getSaveableParent( element);
         let selector = this.dom.getSelector( element);
         // 2DO isLayoutable, isInsertable, hasIdeas, hasCloud
+        let menu = $$$.getEditorAttr( saveable, 'ude_menu');
+        let m = {
+            'select' : (menu == 'on' || menu.indexOf( 'sel') > -1),
+            'config' : (menu == 'on' || menu.indexOf( 'config') > -1),
+            'styles' : (menu == 'on' || menu.indexOf( 'styles') > -1),
+            'layouts' : (menu == 'on' || menu.indexOf( 'lays') > -1),
+            'cloud' : (menu == 'on' || menu.indexOf( 'clouds') > -1),
+            'ideas' : (menu == 'on' || menu.indexOf( 'ideas') > -1),
+        };
         // Build list of available services
         let services= {};
-        if ( this.displayConfig( element, true) || activeLabel == 'config') 
+        if ( m.select && $$$.dom.cursor.fetch().selectionInNode) 
+            services[ 'select'] = { tag:"a", onclick:"$$$.displaySelectionActions("+selector+");", value:"Select"};
+        if ( m.config && this.displayConfig( element, true) || activeLabel == 'config') 
             services[ 'config'] = { tag:"a", onclick:"$$$.displayConfig("+selector+");", value:"Config"};
-        if ( this.displayStyle( element, true) || activeLabel == 'styles')
+        if ( m.styles && this.displayStyle( element, true) || activeLabel == 'styles')
             services[ 'styles'] = { tag:"a", onclick:"$$$.displayStyle("+selector+");", value:"Styles"};
-        if ( this.displayLayout( element, true) || activeLabel == 'layouts')
+        if ( m.layouts && this.displayLayout( element, true) || activeLabel == 'layouts')
             services[ 'layouts'] = { tag:"a", onclick:"$$$.displayLayout("+selector+");", value:"Dispositions"};
-        if ( this.displayCloud( element, true) || activeLabel == 'cloud')    
+        if ( m.cloud && this.displayCloud( element, true) || activeLabel == 'cloud')    
             services[ 'cloud'] = {tag:"a", onclick:"$$$.displayCloud("+selector+");", value:"Cloud"};
-        if ( this.displayIdeas( element, true) || activeLabel == 'ideas')    
+        if ( m.ideas && this.displayIdeas( element, true) || activeLabel == 'ideas')    
             services[ 'ideas'] = { tag:"a", onclick:"$$$.displayIdeas("+selector+");", value:"Idées"};
         if ( ([ 'div.zoneToFill', 'div.html'].indexOf( this.dom.attr( saveable, 'exTag')) > -1 || activeLabel == 'code') && this.ude.textEd) {
             // Add Code source button
@@ -964,7 +999,12 @@ class UDE_menu {
         let selector = API.dom.getSelector( element);
         let exTag = this.dom.attr( element, 'exTagType');
         if ( checkForContent) 
-            return ( (this.dom.textContent( 'UD_mode') == "edit3") || ( exTag == "p.undefined"))
+            return ( 
+                this.dom.textContent( 'UD_mode').indexOf( "edit") > -1
+                || exTag == "p.undefined"
+                || [ "data", "style", "program"].indexOf( this.dom.getViewType( element)) > -1
+                || $$$.getEditorAttr( element, 'fromModel')
+            );
         let exTagParts = exTag.split( '.');
         if ( this.dom.element( boxName)) { this.closeBox();}
         // Get element's name
@@ -1012,7 +1052,16 @@ class UDE_menu {
             tagSelector[ tagLabel] = { tag:"span", class:buttonClass, onclick: action, title:tagLabel, value:tagLabel};
             tagSelectorPanel[ tagLabel] = { tag:"a", class:"panel-block"+active, onclick: action, title:tagLabel, value:iconAndLabel};
         }
-        
+        /*
+        // Build generic config
+        let configUI = { name: { tag:"div", class:"nameEdit", value:[[
+            { tag:"span", class:"firstlabel", edit:"off", value: API.translateTerm( "Element name :")},
+            { 
+            tag:"span", class:"objectName", stage:"on", placeholder: placeholder,
+            valid:"if ( API.changeName( " + selector + ")) API.closeBox();", value: name
+            }
+        ]};
+        */
         // Build flag controls
         let flagControls = "";
         // TEMP calculator doesn't accept {} syntax for elements
@@ -1024,18 +1073,29 @@ class UDE_menu {
             flagControls += $$$.calculate( "switchTag( " + valueSelector + ", 'configSwitch', 'editable', 'CFG_editable');");
         }
         // Build specifc actions
-        let actionSelector = { systemLabel:{ tag:"span", class:"label", value:API.translateTerm( 'Tools :')}};        
-        {
-            let buttonClass = "button";
+        let actionSelector = { systemLabel:{ tag:"span", class:"label", value:API.translateTerm( 'Tools :')}};    
+        let buttonClass = "button";
+        // Copy from an original language view   
+        // 2DO use nameHasLang() (utilities.js)        
+        if ( this.dom.attr( element, 'exTag') == 'div.part' && [ ' EN', ' FR'].indexOf( name.substring( name.length -3)) > -1) {            
+            // sourceName = 1st B02 with same root or use lang
             // Copy a view
             let targetView = API.dom.getView( element);
-            let targetName = API.dom.attr( targetView, 'name');            
+            let targetName = API.dom.attr( targetView, 'name'); // this.dom.attr( element, 'name')            
             let sourceName = targetName.replace( ' TBC', '').replace( ' FR', '').replace( ' EN', ''); 
-            if ( sourceName != targetName) {
+            if ( sourceName != targetName && $$$.dom.elementByName( sourceName)) {
+                // A view of same name as this view without a language suffix exists so propose to copy contents
                 let actionLabel = this.getLabel( "Copy original");             
                 let action = "API.copyElements( '" + sourceName + "', '" + targetName + "');";
                 actionSelector[ tagLabel] = { tag:"span", class:buttonClass, onclick: action, title:actionLabel, value:actionLabel};
             }
+        }
+        if ( exTag == 'div.image' && element.innerHTML.indexOf( 'shutterstock') > -1) {
+            // Link to buy a shutterstock image
+            let imageURL = $$$.dom.element( 'img', element).src;
+            let action = "$$$.licenseImage( '" + element.id + "');";
+            let actionLabel = this.getLabel( 'License');
+            actionSelector[ 'license'] = { tag:"span", class:buttonClass, onclick: action, title:actionLabel, value:actionLabel};
         }
         // Build link to parent
         let parentLink = {};
@@ -1075,6 +1135,14 @@ class UDE_menu {
             },
             parentLink
         };
+        /* if source-able
+        let source = this.dom.attr( element, 'ud_source');
+        tagSelectorPanel[ 'source'] = { tag:"p", class:"panel-block", value:{
+                tag:"span", class:"objectName", stage:"on", placeholder: placeholder,
+                valid:"if ( $$$.setSource( " + selector + ", this)) API.closeBox();", value: source
+            }
+        };
+        */
         actionSelector[ 'systemLabel'] = '';
         let panelContentData = {
             tag:"div", type:"configurator", class:"panel", name:boxName, edit:"off", value:{
@@ -1347,10 +1415,18 @@ class UDE_menu {
         let boxClass = "ideasBox";
         // Shortcuts
         let gval = this.dom.udjson.value;
-        // Look for original text
+
+        // Set panel mode and initialise content
+        let panel = true;
+        let contentPanel = "";
+        let content = '<a href="javascript:" class="actionIcon" onclick="API.closeBox();"><img src="'+this.icons['Idea']+'"/></a>';   
+
+        // Look for translation from original text
         let original = "";
         let source = API.getEditorAttr( element, 'data-ude-datasrc');
-        if ( source) {
+        if ( source) { // and requires action // if just source then add original to ideas
+            if ( checkForContent) return true;
+            // 2DO seperate module udetranslate.js(ex ideas)
             // Build selector to corresponding element in source as source id
             let srcSel = source;
             let selector = this.dom.getSelector( element);
@@ -1374,23 +1450,55 @@ class UDE_menu {
                     srcSel = this.dom.udjson.valueByPath( srcSel, srcPath, srcEl.id);
                 }
             }
-            original = this.dom.element( srcSel).innerHTML;
-            // PATCH trial Translate
+            let srcEl = this.dom.element( srcSel);
+            if ( !srcEl) return debug( { level:1, return:null}, "Error datasrc attribute in "+ element.id + "not found " + srcSel);
+            original = srcEl.innerHTML;            
+            // Get source and target languages
+            let sourceLang = this.dom.attr( this.dom.getView( source), 'ud_lang');
+            if ( !sourceLang) sourceLang = "EN";
+            let targetView = this.dom.getView( element);
+            let targetName = this.dom.attr( targetView, 'name');
+            let targetLang = this.dom.attr( targetView, 'ud_lang');
+            if ( !targetLang) targetLang = targetName.substring( targetName.length - 2);            
+            // Translate via service
             let params = {
                 action : "translate",
-                source : "en",
-                target :  "fr",
+                source : sourceLang.toLowerCase(),
+                target : targetLang.toLowerCase(),
                 text : original,
-                dataTarget : "_TMP_ideas_Google_translate",
+                dataTarget : "UD_spare", //ideas_Google_translate",
                 dataSource : "translation"
             }
+            // 2DO should be translation service
             let rep = API.service( "GoogleTranslate", params);
-
+            let servicePr = $$$.servicePromise( 'GoogleTranslate', params);
+            servicePr.then( () => {
+                let display = "";
+                let translation = $$$.dom.element( 'UD_spare').textContent;
+                let ideaClick = "$$$.replaceTextAtCursor( this.textContent);"; // and remove requiresaction (or maybe in setChanged)      
+                display += '<a class="idea" onclick="' + ideaClick +'">'+translation+'</a>';
+                let ideasBox = $$$.dom.element("_TMP_IDEAScontent")
+                ideasBox.innerHTML = display;
+            });
+            // Generate Panel content
+            let content = "";
+            if ( panel) {
+                let contentData = {
+                    tag:"div", type:"configurator", class:"panel", name:boxName, edit:"off", value:{
+                        heading : { tag:"p", class:"panel-heading", onclick:"API.closeBox();", value:"Idées"},
+                        tabs : this._getTabs( element, "ideas"),
+                        content : { tag:"div", name:"_TMP_IDEAScontent", class:boxClass+'Bulma', value:contentPanel},
+                        // layouts : (layoutable) ? { tag:"div", class:"layoutSelect", value:layoutSelector} : { value:""},
+                        // inserts : (insertable) ? { tag:"div", class:"insertSelect", value:insertSelector} : { value:""},
+                    }          
+                }; 
+                content = API.json.putElement( contentData, false);
+            }
+            // Display action box
+            if ( typeof process != 'object') { this.addActionBox( element, boxName, boxClass, content); return}
+            else { return content.textContent;} 
            // original = this.dom.element( source).textContent;
-        }
-        let panel = true;
-        let contentPanel = "";
-        let content = '<a href="javascript:" class="actionIcon" onclick="API.closeBox();"><img src="'+this.icons['Idea']+'"/></a>';            
+        }                 
         
         // Present textual or visual ideas depending on element type
         let exTag = this.dom.attr( element, 'exTag');
@@ -1465,111 +1573,129 @@ class UDE_menu {
                 }
                 keywords.view = []; // 2DO add rest of view
                 
-                // Get ideas from Ideas handler
-                if ( this.ideasHandler) {
-                    // 2DO use promise/then
-                    ideas = this.ideasHandler.getIdeas( keywords, element, '_TMPideas');
-                } 
-                // Add ideas available i ndoc
-                // Classify keywords
-                // 2DO in order of proximity, keywords.verbs, keywords.subjects, objects, articles
-                // keywords.POSgroups
-                // Fetch candidates
-                let exTag = this.dom.attr( element, 'exTag');
-                // let index =  this.getIndex() // nth H1 etc
-                let modelsView = this.dom.element( "[name='Ideas']", this.dom.element( 'document'));
-                if ( !modelsView) { modelsView = this.dom.element( "[name='Models']", this.dom.element( 'document'));}
-                let h2Titles = this.dom.element( "h2", modelsView);
-                let candidates = ( h2Titles) ? API.grabPortion() : API.dom.unpagedChildElements( modelsView);
-                /*
-                    Models view 
-                    elements of target type with default content
-                    elements of target type with suggested content (ideas)
-                    Tables and connectors with target type in column
-                    Headers that indicate content Defaults, Ideas  or Models view with specif use
-                
-                    Substitutable content : {subs} 
-                    Find subs from instanced
-                    Get subject, object, verb
+                if ( exTag == "div.image") {
+                    // Use image picker for image elements
+                    if ( checkForContent) return true; // May need a fct for availablity of services ( content != "");
+                    content += API.getImagePicker( element, 'API.closeBox();', keywords);
+                    contentPanel += API.getImagePicker( element, 'API.closeBox();', keywords);
                     
-                    Get candidatePhrases
-                    Get elementRules
-                    Get elementFormulas
-                */
-                // Select relevant content and store as lookup table
-                let matchKeywords = function( text, keywords) {
-                    // Remove punctuation
-                    // Split on spaces
-                    let words = getSignificant( text);
-                    let keywordHits = 0;
-                    let hits = [];
-                    for ( let wordi=0; wordi < words.length; wordi++) {
-                        let cword = words[ wordi];
-                        let before = keywordHits;
-                        if ( keywords.model.indexOf( cword) > -1) keywordHits += 3;
-                        else if ( keywords.element.indexOf( cword) > -1) keywordHits += 10;
-                        else if ( keywords.section.indexOf( cword) > -1) keywordHits += 6;
-                        else if ( keywords.view.indexOf( cword) > -1) keywordHits += 3;
-                        if ( keywordHits > before) hits.push( cword);
+                } else if ( this.ideasHandler) {
+                    // Get ideas from Ideas handler
+                    if ( panel && !checkForContent && !this.dom.element( boxName)) {
+                        let contentData = {
+                            tag:"div", type:"configurator", class:"panel", name:boxName, edit:"off", value:{
+                                heading : { tag:"p", class:"panel-heading", onclick:"API.closeBox();", value:"Idées"},
+                                tabs : this._getTabs( element, "ideas"),
+                                content : { tag:"div", name:"_TMP_IDEAScontent", class:boxClass+'Bulma', value:$$$.translateTerm( 'Searching ideas')}
+                            }          
+                        }; 
+                        content = API.json.putElement( contentData, false);                    
+                        // Display action box
+                        if ( typeof process != 'object') { this.addActionBox( element, boxName, boxClass, content);}
+                        this.ideasHandler.event( { event:'open'});
                     }
-                    if ( keywordHits > 6) { return true;}
-                    return false;
-                }
-                let matchClass = function( classStr, element) {
-                    if ( !classStr) return true;
-                    let classes = classStr.split( ' ');
-                    for ( let cli=0; cli<classes.length; cli++) {
-                        if ( element.classList.contains( classes[ cli])) return true;
-                    }
-                    return false;
-                }
-                
-                for ( let candi=0; candi < candidates.length; candi++) {
-                    let candidate = candidates[ candi];                
-                    let content = ( typeof candidate == 'object') ? candidate.innerHTML : candidate; 
-                    if ( content.indexOf( '{verb}') > -1) {
-                        // Idea contains jokers - try all variations of nouns, verbs etc
-                        let verbs = gval( keywords, 'verb');
-                        let nouns = gval( keywords, 'noun');
-                        let articles = gval( keywords, 'article');
-                        for ( let verbi=0; verbi < verbs.length; verbi++) {
-                            let verb = verbs[ verbi];
-                            for ( let nouni=0; nouni < nouns.length; nouni++) {
-                                let noun = nouns[ nouni];
-                                let article = articles[ nouni];
-                                let substituted = content.replace( '{verb}', verb).replace( '{article}', article).replace( '{noun}', noun);
-                                candidates.push( substituted);
-                            }
-                        }  
-                        continue; 
-                    }               
-                    let match = 
-                        ( typeof candidate == 'string' || (
-                            this.dom.attr( candidate, 'exTag') == exTag
-                            && matchClass( candidate.className, element)                        
-                        )) 
-                        && matchKeywords( content, keywords)                    
-                        && ( ideas.indexOf( content) == -1)
-                        && ( element.textContent.indexOf( content) == -1)
-                    ;
-                    if ( match) { ideas.push( content);}
-                    // 2DO mode replace all / append
-                    // 2DO if variables loop for sets of article, noun, verb
-                    /*                
-                    switch ( this.dom.attr( candidate, 'exTag')) {
-                        default :
-                            if ( matchKeywords( candidate.textContent, keywords)) { ideas.push( candidate.innerHTML);}
-                            break;
-                            
-                    }
+                    if ( checkForContent) return this.ideasHandler.getIdeas( keywords, element, checkForContent);                     
+                    ideas = this.ideasHandler.getIdeas( keywords, element);          
+                    return;         
+                } else {
+                    // Add ideas available in doc
+                    // Classify keywords
+                    // 2DO in order of proximity, keywords.verbs, keywords.subjects, objects, articles
+                    // keywords.POSgroups
+                    // Fetch candidates
+                    let exTag = this.dom.attr( element, 'exTag');
+                    // let index =  this.getIndex() // nth H1 etc
+                    let modelsView = this.dom.element( "[name='Ideas']", this.dom.element( 'document'));
+                    if ( !modelsView) { modelsView = this.dom.element( "[name='Models']", this.dom.element( 'document'));}
+                    let h2Titles = this.dom.element( "h2", modelsView);
+                    let candidates = ( h2Titles) ? API.grabPortion() : API.dom.unpagedChildElements( modelsView);
+                    /*
+                        Models view 
+                        elements of target type with default content
+                        elements of target type with suggested content (ideas)
+                        Tables and connectors with target type in column
+                        Headers that indicate content Defaults, Ideas  or Models view with specif use
+                    
+                        Substitutable content : {subs} 
+                        Find subs from instanced
+                        Get subject, object, verb
+                        
+                        Get candidatePhrases
+                        Get elementRules
+                        Get elementFormulas
                     */
+                    // Select relevant content and store as lookup table
+                    let matchKeywords = function( text, keywords) {
+                        // Remove punctuation
+                        // Split on spaces
+                        let words = getSignificant( text);
+                        let keywordHits = 0;
+                        let hits = [];
+                        for ( let wordi=0; wordi < words.length; wordi++) {
+                            let cword = words[ wordi];
+                            let before = keywordHits;
+                            if ( keywords.model.indexOf( cword) > -1) keywordHits += 3;
+                            else if ( keywords.element.indexOf( cword) > -1) keywordHits += 10;
+                            else if ( keywords.section.indexOf( cword) > -1) keywordHits += 6;
+                            else if ( keywords.view.indexOf( cword) > -1) keywordHits += 3;
+                            if ( keywordHits > before) hits.push( cword);
+                        }
+                        if ( keywordHits > 6) { return true;}
+                        return false;
+                    }
+                    let matchClass = function( classStr, element) {
+                        if ( !classStr) return true;
+                        let classes = classStr.split( ' ');
+                        for ( let cli=0; cli<classes.length; cli++) {
+                            if ( element.classList.contains( classes[ cli])) return true;
+                        }
+                        return false;
+                    }
+                    
+                    for ( let candi=0; candi < candidates.length; candi++) {
+                        let candidate = candidates[ candi];                
+                        let content = ( typeof candidate == 'object') ? candidate.innerHTML : candidate; 
+                        if ( content.indexOf( '{verb}') > -1) {
+                            // Idea contains jokers - try all variations of nouns, verbs etc
+                            let verbs = gval( keywords, 'verb');
+                            let nouns = gval( keywords, 'noun');
+                            let articles = gval( keywords, 'article');
+                            for ( let verbi=0; verbi < verbs.length; verbi++) {
+                                let verb = verbs[ verbi];
+                                for ( let nouni=0; nouni < nouns.length; nouni++) {
+                                    let noun = nouns[ nouni];
+                                    let article = articles[ nouni];
+                                    let substituted = content.replace( '{verb}', verb).replace( '{article}', article).replace( '{noun}', noun);
+                                    candidates.push( substituted);
+                                }
+                            }  
+                            continue; 
+                        }               
+                        let match = 
+                            ( typeof candidate == 'string' || (
+                                this.dom.attr( candidate, 'exTag') == exTag
+                                && matchClass( candidate.className, element)                        
+                            )) 
+                            && matchKeywords( content, keywords)                    
+                            && ( ideas.indexOf( content) == -1)
+                            && ( element.textContent.indexOf( content) == -1)
+                        ;
+                        if ( match) { ideas.push( content);}
+                        // 2DO mode replace all / append
+                        // 2DO if variables loop for sets of article, noun, verb
+                        /*                
+                        switch ( this.dom.attr( candidate, 'exTag')) {
+                            default :
+                                if ( matchKeywords( candidate.textContent, keywords)) { ideas.push( candidate.innerHTML);}
+                                break;
+                                
+                        }
+                        */
+                    }
                 }
             } 
         }
-        if ( exTag == "div.image") {
-            content += API.getImagePicker( element, 'API.closeBox();', keywords);
-            contentPanel += API.getImagePicker( element, 'API.closeBox();', keywords);
-        } else {
+        {
             let selector = this.dom.getSelector( element);
             let event = "{ event:'idea', type:'idea', data: '" + element.textContent.replace( /\'/g, "\\'") + "'};";
             let click = "API.dispatchEditEvent( " + event + ", " + selector + ");";
@@ -1606,12 +1732,13 @@ class UDE_menu {
                 contentPanel += '<a class="panel-block" onclick="' + ideaClick +'">'+ideas[ ideai]+'</a>';
             }
         }
+        if ( checkForContent) return ( ideas.length > 0);
         // Generate Panel content
         if ( panel) {
             let contentData = {
                 tag:"div", type:"configurator", class:"panel", name:boxName, edit:"off", value:{
                     heading : { tag:"p", class:"panel-heading", onclick:"API.closeBox();", value:"Idées"},
-                    tabs : this._getTabs( element, "cloud"),
+                    tabs : this._getTabs( element, "ideas"),
                     content : { tag:"div", name:"_TMP_IDEAScontent", class:boxClass+'Bulma', value:contentPanel},
                     // layouts : (layoutable) ? { tag:"div", class:"layoutSelect", value:layoutSelector} : { value:""},
                     // inserts : (insertable) ? { tag:"div", class:"insertSelect", value:insertSelector} : { value:""},

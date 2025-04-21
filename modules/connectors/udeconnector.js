@@ -82,13 +82,14 @@
                 else { processed = this.paramEditor.inputEvent( e, element);}
                 break;
             case "save" :
-                processed = this.prepareToSave( element, e.target);
+                if (typeof e.target != "undefined") processed = this.prepareToSave( element, e.target);
                 break;
             case "remove" :
                 break;
             case "insert" :
                 break;
             case "configure" :
+            case "close-configure" :
                 debug( {level:5}, "UDEconnector inputEvent/configure");            
                 let name = this.dom.attr( saveable, 'name');
                 let editZoneId = name+this.dataZoneSuffix;
@@ -97,14 +98,34 @@
                 let subType = this.dom.attr( saveable, 'ud_subtype'); 
                 if ( subType == "site") { // Make switch when larger choice
                     let configZoneId = name+"_config";
-                    API.showNextInList( [editZoneId, configZoneId, paramZoneId]); 
+                    let elList = [editZoneId, configZoneId, paramZoneId];                     
+                    if ( typeof e.action != "undefined" && e.action == "leave") $$$.showFirstInList( elList); 
+                    else {
+                        $$$.showNextInList( elList);
+                        $$$.rearmFloaterTO( 2000);
+                    }
+                    // 2DO Redo this test create zone if necessary, build if empty
                     if ( 
                         ( !this.dom.element( configZoneId) || !this.dom.element( configZoneId).classList.contains( 'hidden'))
-                        && this.siteExtract
+                        && ( this.siteExtract || typeof window.udc_siteextract != "undefined")
                     ) {
+                        if ( !this.siteExtract) this.siteExtract = window.udc_siteextract;
                         this.siteExtract.buildConfigZone( name);
                     }
-                } else  API.showNextInList( [editZoneId, paramZoneId]);
+                } else  {
+                    // Patch to check names
+                    let paramZone = $$$.dom.element( paramZoneId);
+                    if ( !paramZone) {
+                        paramZoneId = name + '_parametereditZone';
+                        paramZone = $$$.dom.element( paramZoneId);
+                        if ( !paramZone) {
+                            console.error( 'Badly configured element : ' + name);
+                            break;
+                        }
+                    }
+                    let elList =  [editZoneId, paramZoneId];
+                    if ( typeof e.action != "undefined" && e.action == "leave") $$$.showFirstInList( elList); else $$$.showNextInList( elList);
+                }                    
                 processed = true;
                 break;
             case "copy" : 
@@ -286,6 +307,8 @@
             let requiredByApp = this.dom.element( 'UD_requiredModules').textContent;
             if ( typeof process != "object" && requiredByApp.indexOf( 'udcsiteextract') == -1) {
                 API.loadScript( "modules/connectors/udcsiteextract.js", "let me = window.ud.ude.modules[ 'div.connector'].instance; me.siteExtract = new UDC_siteExtract( me);", "UDC_siteExtract", "div.connector.site");
+            } else if ( typeof siteExtractInstance != "undefined") {
+                this.siteExtract = siteExtractInstance;
             }
         }
         
@@ -307,11 +330,11 @@
         let objectData = { 
             meta:{ type:"connector", name:name, zone:name+"editZone", caption:suggestedName, captionPosition:"top"}, 
             data:{ 
-                button1:{ tag:"span", class:"rightButton", value:{ tag:"a", ui:"yes", href:"javascript:", onclick:"API.showNextInList( ['"+name+"_dataeditZone', '"+name+"_parameters_editZone']);", value:"configurer"}},
-                button2:{ tag:"span", class:"rightButton", value:{ tag:"a", ui:"yes", href:"javascript:", onclick:"API.connectorRefresh( '"+name+"');", value:"refresh"}}, 
-                button3:{ tag:"span", class:"rightButton", value:{ tag:"a", ui:"yes", href:"javascript:", onclick:"API.connectorUpdateServer( '"+name+"');", value:"update server"}},
-                config:{ tag:"div", type:"text", name:name+"_parameters_editZone", value: { tag:"textedit", name:name+"_parameter", class:"textContent", value:[ "json", 'ready = "no"']}},
-                cache:{ tag:"div", type:"table", name:name+"_dataeditZone", class:"hidden", value:"Pas de données. Configurez le connecteur d'abord"},   
+                button1:{ tag:"span", class:"rightButton", ui:1, value:{ tag:"a", ui:"yes", href:"javascript:", onclick:"API.showNextInList( ['"+name+"_dataeditZone', '"+name+"_parameters_editZone']);", value:"configurer"}},
+                button2:{ tag:"span", class:"rightButton", ui:1, value:{ tag:"a", ui:"yes", href:"javascript:", onclick:"API.connectorRefresh( '"+name+"');", value:"refresh"}}, 
+                button3:{ tag:"span", class:"rightButton", ui:1,  value:{ tag:"a", ui:"yes", href:"javascript:", onclick:"API.connectorUpdateServer( '"+name+"');", value:"update server"}},
+                config:{ tag:"div", type:"text", name:name+"_parameters_editZone", menu:'off', value: { tag:"textedit", name:name+"_parameter", class:"textContent", value:[ "json", 'ready = "no"']}},
+                cache:{ tag:"div", type:"table", name:name+"_dataeditZone", class:"hidden", menu:'off', value:"Pas de données. Configurez le connecteur d'abord"},   
             },
             changes: []
         };
@@ -330,7 +353,7 @@
         // Process according to MIME type
         let mime = this.dom.attr( saveable, "ud_mime");        
         // if text/text force json  
-        if ( mime = "text/mixed") {
+        if ( mime == "text/mixed") {
             // Transform to JSON
             // Setup data holder
 
@@ -381,6 +404,9 @@
     
    /*
     * API
+    */
+   /**
+    * Deprecated if using standard service 
     */
     then( context) {
         let connector = this;
@@ -490,7 +516,13 @@
         let uri = "/"+service+"/"+oid+"/";
         let action = this.dom.udjson.value( params, 'action');
         if ( action) uri += action+"/"; else uri += '/';
-        let context = { action: "set json", holder: connectorName+"_object", jsonPath: "data/cache", connector:this, connectorName:connectorName, ud:this.ud, thenDo:thenDo, change:true};        
+        let context = { 
+            action: "set json", 
+            holder: connectorName+"_object", 
+            jsonPath: "data/cache", connector:this, 
+            connectorName:connectorName, 
+            ud:this.ud, thenDo:thenDo, change:true
+        };        
         for ( let serverParam in serverParams) { 
             uri += serverParam + '|' + serverParams[ serverParam] + '/';
             context[ serverParam] = serverParams[ serverParam];
@@ -499,34 +531,48 @@
         if ( cacheHolder.id.indexOf( '_object') == -1) { 
             context = { zone: cacheHolder.id, action: "fill zone", connector:this, connectorName:connectorName, ud:this.ud, thenDo:thenDo};
         }
-       // and promise
-       /*
-       let promise = new Promise((UDconnector_promiseSuccess)=> {
-            context.promise = this;
-            window.ud.udajax.serverRequest( uri, "GET", "", context);
-       });
-       promise.then((value) => {
-           console.log( "then", value);
-       }); 
-       */
-       /*
-        let thenFct = this.then.bind( this);
-        let promise = new Promise( (resolve, reject) => {        
-            console.log( "Promise udeconnector", thenFct);            
-        });
-        promise.then( (context) => {
-           console.log( "then udeconnector", context);
-           this.then( context);
-        });*/
         this.catch = function(context) { console.error( "Can't refresh connector (catch)");};
-        context.promise = this;        
-        window.ud.udajax.serverRequest( uri, "GET", "", context);
-        /* Idea 2225002
-            let promise = window.ud.udajax.serverRequest( uri, "GET", "", context);
-            // Attach next action to promise created by udajax.serverRequest
-            promise.then( this.then.bind(this));
-        
-        */
+        let serviceName = params.service;
+        if ( serviceName != 'siteextract' && serviceName != 'webdesk') {
+            // New version 11/01/24 OS compatible using scrape service (derived from siteextract)
+            // Transfer reply via UD_spare
+            params.dataTarget = 'UD_spare';
+            params.dataSource = 'results';
+            // Provide service with OID of current doc
+            params[ 'doc-OID'] = this.dom.attr( 'document', 'ud_oid'); //.replace( "--{OIDPARAM}", "");
+            let serverPr = $$$.servicePromise( 'scrape', params); //params.service
+            serverPr.then( () => {
+                // Get results and transfert to object                
+                let results = this.dom.udjson.parse( 'UD_spare');
+                if ( !results) return debug( {level:1, return:false}, "No data in service reply");
+                this.connectorCache( connectorName, results);
+                // Develop results table and place in data edit zone
+                let edTable = this.dom.udjson.putElement( results, connectorName+'_data');        
+                let editZone = this.dom.element( connectorName+this.dataZoneSuffix);
+                if ( !editZone) editZone = this.dom.element( connectorName+this.editZoneSuffix);
+                if ( editZone && edTable) editZone.innerHTML = edTable.innerHTML;
+                // Arrange & updatetable
+                edTable = this.dom.element( 'table', editZone) ; // !!! Important need live table 
+                this.dom.arrangeTable( edTable.id);
+                $$$.updateTable( edTable.id); // there maybe formulas
+                /*
+                // Link horizontal scroll                
+                API.updateTable( edTable.id);        
+                let edTableHead = this.dom.element( 'thead', edTable);
+                let edTableBody = this.dom.element( 'tbody', edTable);
+                if ( edTableBody && edTableHead)
+                    this.dom.attr( edTableBody, 'onscroll', "this.previousSibling.scrollLeft = this.scrollLeft;");                        
+                */
+                // Run application code
+                if ( thenDo) eval( context.thenDo);    
+                // Mark connector for saving
+                this.ud.viewEvent( 'change', connector);
+            });
+        } else {
+            // DEPRECATED using direct call to server siteextract and "then" method
+            context.promise = this;        
+            window.ud.udajax.serverRequest( uri, "GET", "", context);
+        }
 
     } // UDEconnector.connectorRefresh()
 

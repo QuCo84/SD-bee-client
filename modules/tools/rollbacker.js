@@ -23,6 +23,7 @@
     displayElement;
     stack = null;
     stackPointer = -1;
+    simple = [];
        
     constructor( ud, displayId)
     {
@@ -36,6 +37,7 @@
         }
         this.displayElement = document.getElementById( displayId);
         this.stack = document.getElementById( this.stackId);
+        this.simple = [ 'h1', 'h2', 'h3', 'h4', 'h5', 'p', 'p.subparagraph', 'div.audio', 'div.video', 'div.image'];
         window.rollbacker = this;
     }
     
@@ -56,21 +58,37 @@
     inputEvent( e, element)
     {
         var processed = false;
-        // FInd saveable element
+        // Find saveable element
         let saveable = this.dom.getSaveableParent( element);
-        if ( !saveable) 
-        {
+        if ( !saveable) {
             let binded = this.dom.parentAttr( element, 'ude_bind');
             if ( binded) saveable = this.dom.element( binded);
+            if (!saveable) return debug( {level:3, return:false}, "Can't rollback non saveable elements", element);
         }
-        if (!saveable) return debug( {level:3, return:false}, "Can't rollback un saveable elements", element);
         
         let event = e.event;
+        if ( event != "change") return;
         // Get last stack item
         let last = null;
         let stackItems  = this.stack.childNodes;
-        if ( stackItems.length) last = stackItems[ this.stackPointer];
+        if ( stackItems.length) last = stackItems[ this.stackPointer];       
+        // Get stackable element
         let stackItem = null;
+        let exTag = this.dom.attr( saveable, 'exTag');
+        let objectHolder = this.dom.element( 'div.object', saveable);
+        if ( this.simple.indexOf( exTag) > -1) {
+            // Clone real node
+            stackItem = saveable.cloneNode( true);
+            if ( typeof e.content != "undefined") stackItem.innerHTML = e.content;
+        } else if (objectHolder) {
+            // Inform element of change event so object is updated
+            // Copy content of object div
+            stackItem = document.createElement( 'div');
+            stackItem.innerHTML = objectHolder.innerHTML;
+        } else return processed;
+        // Set attributes                
+        this.dom.attr( stackItem, 'name', "__CLEAR__"); // to avoid name exists                
+        stackItem.id = "_COPY_"+saveable.id+"_"+stackItems.length;
         if ( 
             !last
             || saveable.id != last.id.split('_')[2]
@@ -82,27 +100,22 @@
                 /*
                 stackItem.innerHTML = saveable.innerHTML;
                 stackItem.className = saveable.className;
-                stackItem.id = "_COPY_"+saveable.id+"_"+this.stackPointer;*/
+                stackItem.id = "_COPY_"+saveable.id+"_"+this.stackPointer;
+                */
             } 
-            {
-                // Add new stack entry
-                stackItem = saveable.cloneNode( true);
-                this.dom.attr( stackItem, 'name', "__CLEAR__"); // to avoid name exists
-                if ( typeof e.content != "undefined") stackItem.innerHTML = e.content;
-                stackItem.id = "_COPY_"+stackItem.id+"_"+stackItems.length;
-                this.stack.appendChild( stackItem);
-                this.stackPointer = this.stack.childNodes.length - 1;
-            }                
-        } else {
-            stackItem = last;
-            stackItem.innerHTML = saveable.innerHTML;
-            // copy content
-        }   
+            // Add stack item to stack
+            this.stack.appendChild( stackItem);
+            this.stackPointer = this.stack.childNodes.length - 1;                          
+        } /*else {
+            // Update content of existing stack item with content to save
+            last.innerHTML = stackItem.innerHTML;
+        }*/   
         // if stack already has item then remove
         let action = "change";      
         // if element is new action = remove
         this.dom.attr( stackItem, 'RB_time', this.ude.ticks);
         this.dom.attr( stackItem, 'RB_action', action);
+        processed = true;
         //this.stackPointer++;        
         return processed;        
     } // Rollback.inputEvent()
@@ -121,12 +134,19 @@
                 // copy content, class and 
                 let targetId = item.id.split('_')[2];
                 // let targetId = item.id.replace('_COPY_', '');
-                let target = this.dom.element( targetId);
-                if ( target)
-                {                    
-                    target.innerHTML = item.innerHTML;
-                    target.className = item.className;                    
-                    //this.ide.initialiseElement( targetId);
+                let target = this.dom.element( targetId);                
+                if ( target ) {                    
+                    let exTag = this.dom.attr( target, 'exTag');
+                    let objectHolder = this.dom.element( 'div.object', target); 
+                    if ( this.simple.indexOf( exTag) > -1) {
+                        // Transfert whole content 
+                        target.innerHTML = item.innerHTML;
+                        target.className = item.className;                    
+                    } else if (objectHolder) {
+                        // Transfert to object holder & initialise
+                        objectHolder.textContent = item.textContent;
+                        this.ude.initialiseElement( targetId);
+                    }                   
                     this.ud.viewEvent( "change", target);
                 }                
                 break;

@@ -17,6 +17,8 @@
     ud;
     dom;
     ude;
+    lastChangedIsView=false;
+
     zoneNameSuffixes = {
         active:"activeZone",
         edit:"editZone",
@@ -30,6 +32,10 @@
         this.dom = ude.dom;
         this.ude.modules['div.html'].instance = this;
         //if ( typeof ud.ude != "undefined") this.ude = ud.ude; else this.ude = ud;
+        if ( typeof API != "undefined" && API) API.addFunctions( 
+            this, 
+            [ 'updateHTMLfromView']
+        );
 
     } // UDEhtml.construct()
     
@@ -44,8 +50,16 @@
         let source = element;
         let content = source.textContent;
         let event = e.event;
+        if ( typeof event == 'object') event = event.event;
         let saveable = this.dom.getSaveableParent( source);
         let saveableId = saveable.id;
+        let name = this.dom.attr( saveable, 'name');
+        // let objectHolder = this.dom.element( 'div.object', saveable);
+        let editZone = this.dom.element( name + this.zoneNameSuffixes.edit);
+        let viewZone = this.dom.element( name + this.zoneNameSuffixes.view);
+        if ( !editZone || !viewZone) return $processed;
+        let isEditZone = (editZone.contains( element) || editZone == element);
+        let isViewZone = (viewZone.contains( element) || viewZone == element);
         // Process event  
         switch ( event)
         {
@@ -57,17 +71,74 @@
                 processed = this.ude.textEd.inputEvent( e, element)
                 break;
             case "save" :
-                processed = this.prepareToSave( element, e.target);
+                if ( isEditZone) processed = this.prepareToSave( element, e.target);
+                else if ( isViewZone || this.lastChangedIsView) {
+                    let cursorSave= this.dom.cursor.save(); // 2use $$$.saveCursor();
+                    this._updateHTMLcodeFromView( element);
+                    let objectHolder = this.dom.element( 'div.object', saveable);
+                    processed = true;
+                    //processed = this.prepareToSave( editZone, objectHolder);
+                    // Restore cursor
+                    this.dom.cursor.restore( cursorSave); // 2use $$$.restoreCursor
+                }
                 break;
             case "remove" :
                 break;
             case "insert" :
                 break;
             case "change":
-                 // 2DO Reverse Grap HTML code from viewZone split it (difficult) and place in object
+                // Detect which zone has been modified         
+                if ( isEditZone) {
+                    processed = true;
+                    this.lastChangedIsView = false;
+                    break;
+                }
+                this.lastChangedIsView = true;
+                // viewZone so reverse grap HTML code  
+                // this._updateHTMLcodeFromView( element);
+                // processed = true;
+                break;
+            case "paste": case "endPaste" : {
+                    if ( isViewZone) {
+                        /*
+                        // Convert to editable text
+                        let temp = document.createElement( 'textarea');
+                        temp.innerHTML = e.data.replace( /\n/g, '');
+                        let textData = temp.textContent;
+                        */
+                        // Place HTML directly in view zone
+                        
+                        if ( saveable.classList.contains( 'initialcontent')) viewZone.innerHTML = e.data;
+                        else {
+                            // Get cursor
+                            let cursorP = $$$.dom.cursor;
+                            let cursor = cursorP.fetch();
+                            if ( cursor.HTMLelement != viewZone) {                                
+                                // Identified element inside view zone so replace with pasted content
+                                let w = document.createElement( 'div');
+                                w.innerHTML = e.data;
+                                cursor.HTMLelement.textContent += w.textContent;    
+                            } else {
+                                // Just append
+                                viewZone.innerHTML += e.data;
+                            }
+                        }
+                        // Update editor with new HTML
+                        this._updateHTMLcodeFromView( saveable);
+                        // Mark as changed and remove initialcontent class
+                        $$$.setChanged( saveable);
+                    } else {
+                         let binded = API.dom.getParentWithAttribute( 'ude_bind', element);
+                        let bindedType = API.dom.attr( binded, 'ud_type');
+                        if ( binded.id.indexOf( "editZone") > -1 || [ 'text', 'editZone'].indexOf( bindedType) > -1) {
+                        // if ( this.dom.attr( this.dom.getParentWithAttribute( 'ude_bind', element), 'ud_type') == "editzone") {
+                            processed = this.ude.textEd.inputEvent( e, element);
+                        }
+                    }
+                break;}      
             case "copy" : 
             case "cut" : 
-            case "paste" : case "endPaste" :
+            // case "paste" : case "endPaste" : // 2DO need special treatment
             case "merge up" :
             case "merge down" :
                 let binded = API.dom.getParentWithAttribute( 'ude_bind', element);
@@ -94,7 +165,7 @@
         // Default values for HTML display       
         let values = {
             ntitle : "Titre de l'article",
-            gimage : "https://placekitten.com/g/480/300",
+            gimage : UDE_logo, // "https://www.sd-bee.com/upload/sd-bee-cdn/images/sd-bee.png",
             nteaser : "Texte de l'article",
             firstTeaserLine : "Texte de l'article",
             butFirstTeaserLines : "a second line",
@@ -104,19 +175,19 @@
             oidNew : this.dom.element( "UD_oidNew").textContent, 
             title : "Title",
             sections : [ "Section 1", "Section 2", "Section 3"],
-            image :  "https://placekitten.com/g/480/300", 
+            image :  UDE_logo, // "https://www.sd-bee.com/upload/sd-bee-cdn/images/sd-bee.png", 
             details : [  "details 1", "details 2", "details 3"],
             articles : [
                 { 
                     ntitle: "A Title", 
-                    gimage:"https://placekitten.com/g/480/300",
+                    gimage: UDE_logo, // "https://www.sd-bee.com/upload/sd-bee-cdn/images/sd-bee.png",
                     nteaser : "Texte de l'article",
                     nlink : "https://www.sd-bee.com",
                     ntag : "Categorie"
                 },
                 { 
                     ntitle: "Another Title", 
-                    gimage:"https://placekitten.com/g/480/300",
+                    gimage: UDE_logo, // "https://www.sd-bee.com/upload/sd-bee-cdn/images/sd-bee.png",
                     nteaser : "Texte de 2e article",
                     nlink : "https://www.sd-bee.com",
                     ntag : "Categorie"
@@ -141,7 +212,11 @@
             case "text/json" :
             // JSON100 method
                 if ( dataHolder) {
-                    json = JSONparse( dataHolder.innerHTML);
+                    /*
+                    * JSON contains HTML in ready to edit mode ie &lt; ... &gt;
+                    */ 
+                    if ( false) json = JSONparse( dataHolder.innerHTML.replace( /&quot;/g, '"')); // &quot; gets converted via innerHTML
+                    else json = JSONparse( dataHolder.textContent.replace( /&quot;/g, '"').replace( /</g, '&lt;').replace(/>/g, '&gt;')); // &quot; gets converted via innerHTML
                     bind = dataHolder.id;
                 }
                 if ( !json) {
@@ -169,12 +244,12 @@
                 let editZoneId = name+"editZone"; 
                 let viewZone = this.dom.element( viewZoneId);   
                 let editZone =  this.dom.element( editZoneId);      
-                console.log( viewZoneId, editZoneId);
+            // console.log( viewZoneId, editZoneId);
                 viewZone.classList.remove( 'hidden');
                 editZone.classList.add( 'hidden');
                 // Update viewZone
                 let lines = json.data.edit.value.value;
-                if ( lines[0].indexOf( "HTML") == 0) lines.shift();
+                if ( lines[0].toLowerCase().indexOf( "html") == 0) lines.shift();
                 let txt = "";
                 for (let linei in lines) txt += lines[ linei].trim();
                 let area = document.createElement( 'textarea');
@@ -186,12 +261,21 @@
                  // Detect EJS 
                 let useEJS = ( html.indexOf( '<%') > -1);
                 // Render HTML with EJS or in-built substitution
+                // Look for sample data in html
+                let p1 = html.indexOf( '<!-- sample data ');
+                if (p1 > -1) {                
+                    let p2 = html.indexOf( ' -->', p1);
+                    let sample = html.substring( p1 + 17, p2);
+                    let sampleV = this.dom.udjson.parse( sample);
+                    if ( sampleV) values = sampleV;
+                }
                 try { 
                     html = (useEJS && ejs) ? ejs.render( html, values) : this.ude.calc.substitute( html, values);
+                    viewZone.innerHTML = html;   
                 } catch ( error) {
                     console.log( error);
-                }        
-                viewZone.innerHTML = html;   
+                    viewZone.innerHTML = "Error - can't initiate HTML. try using &lt;!--sample data {} --&gt;";   
+                }                        
                 return true;
             case "text/text" :  //(or csv) 
                 break;
@@ -256,7 +340,7 @@
         let viewZone = this.dom.element( viewZoneId);   
         let editZone =  this.dom.element( editZoneId);      
         if ( !viewZone)  {
-            // Build display and edit zones
+            // Build display and edit zones DEPRECATED not required wit JSON100
             // editZone, inviisble, for editing HTML source
             let newEditZone = document.createElement( 'div');
             this.dom.attr( newEditZone, "id", editZoneId);
@@ -310,15 +394,15 @@
         // Data
         if ( !htmlArray.length) { htmlArray =  [ "HTML "+subtype.toUpperCase(), "...", "..."]}
         let objectData = { 
-            meta:{ type:"activezone", subtype:subtype, name:name, zone:name+"activeZone", caption:suggestedName, captionPosition:"top", autosave:"off"}, 
+            meta:{ type:"activezone", subtype:subtype, name:name, zone:name+"activeZone", caption:suggestedName, captionPosition:"top"}, 
             data:{                 
-                edit:{"tag":"div","name":name+"editZone","type":"text", 'bind':objectName, "value":
+                edit:{"tag":"div","name":name+"editZone","type":"text", 'bind':objectName, autosave:"off", "value":
                   { tag:"textedit", name:name+"editTable", class:"html", value:htmlArray}
                 },
-                display:{ tag:"div", name:name+"viewZone", class:"htmlView", type:"viewzone", subType:"html", 'bind':objectName, autosave:"off", follow:"off", value:""}
+                display:{ tag:"div", name:name+"viewZone", class:"htmlView", type:"viewzone", subType:"html", 'bind':objectName, follow:"off", value:""}
             },
             changes: []
-        };
+        }; // autosave:"off", on viewZone
         // Create object div and append to element
         let objectAttributes = {id:objectName, class:"object textObject hidden", ud_mime:"text/json"};
         let object = this.dom.prepareToInsert( 'div', JSON.stringify( objectData), objectAttributes);
@@ -381,7 +465,8 @@
                     let captionElement = this.dom.element( 'span.caption', activeZone);
                     if ( captionElement) captionElement.textContent = captionElement.textContent.replace( oldName, newName)
                 }
-                dataHolder.innerHTML = JSON.stringify( json); // !!! IMPORTANT textContent will convert <>
+                //dataHolder.innerHTML = JSON.stringify( json); // !!! IMPORTANT textContent will convert <>
+                dataHolder.textContent = JSON.stringify( json).replace( /</g, '&lt;').replace( />/g, '&gt;');
                /* 
                 * Alternative to try - just grab the whold active zone
                 let name = this.dom.attr( saveable, 'name');
@@ -407,6 +492,66 @@
         if ( save) { this.initialise( dataHolder.parentNode.id);}
         return save;
     } // UDEhtml.prepareToSave()
+
+    updateHTMLfromView( elementId) { return this._updateHTMLcodeFromView( this.dom.element( elementId));}
+    _updateHTMLcodeFromView( element) {
+        // Reverse Grap HTML code from viewZone, split it and place in object               
+        // Get different zones
+        let saveable = this.dom.getSaveableParent( element);
+        let name = this.dom.attr( saveable, 'name');
+        let objectHolder = this.dom.element( 'div.object', saveable);
+        let activeZone = this.dom.element( name + this.zoneNameSuffixes.active)
+        let viewZone = this.dom.element( name + this.zoneNameSuffixes.view);
+        let editZone = this.dom.element( name + this.zoneNameSuffixes.edit);
+        // Check modified element is not in code editor
+        if (editZone.contains( element) || editZone == element) return false;
+        // grab HTML and split into lines
+        let html = viewZone.innerHTML;
+        let lines = html.split( '<');
+        let textLines = [];
+        let spaces = "                                                           ";
+        let spaceNb = 0;
+        let last = 0;
+        for ( let linei=0; linei < lines.length; linei++) {
+            let line = lines[ linei];
+            if ( !line) continue;
+            let closeTag = ( line[0] == '/');
+            line = '&lt;' + line.replace( /</g, '&lt;').replace( />/g, '&gt;');
+            let maxMerge = 5;
+            while ( ( line[ line.length-1] == ' ' || line.indexOf( '&nbsp;') == (line.length - 6)) && maxMerge-- && linei < lines.length) { 
+                // Merge lines to avoid trailing space
+                linei++;
+                line += '&lt;' + lines[ linei].replace( /</g, '&lt;').replace( />/g, '&gt;');
+                /*
+                // Use &nbsp;
+                line = line.substring( 0, line.length-1) + '&'; 
+                line += 'nbsp;'
+                */
+            }
+            // 2DO strong for example same line
+            if ( closeTag) {
+                // Closing tag
+                spaceNb--;
+                // Place on same line if no other tags opened just opened, else new line with spaces
+                if ( last > 0) textLines[ textLines.length -1] += line;                        
+                else textLines.push( spaces.substring( 0, spaceNb) + line);
+                last = -1;
+            } else {
+                // Opening tag - always new line
+                textLines.push( spaces.substring( 0, spaceNb) + line);
+                spaceNb++;
+                last = 1;
+            }
+        }
+        // Modify element's JSON data
+        let object = this.dom.udjson.parse( name + '_object');
+        object.data.edit.value.value = textLines;
+        objectHolder.textContent = JSON.stringify( object);
+        // Remove and regenerate active zone
+        activeZone.remove();        
+        this.initialise( saveable.id);        
+    }
+
     
    /*
     * UTILITIES

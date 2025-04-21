@@ -10,7 +10,8 @@ const UD_register = {
         "model" : { "db_type":3, "ud_type": "modelThumbnail", "isContainer":1},
         "dirThumb" : { "db_type":121, "ud_type": "dirThumbnail", "isContainer":1},
         "docThumb" : { "db_type":122, "ud_type": "docThumbnail", "isContainer":1},
-        "modelThumb" : { "db_type":123, "ud_type": "modelThumbnail", "isContainer":1},        
+        "modelThumb" : { "db_type":123, "ud_type": "modelThumbnail", "isContainer":1},     
+        "articleThumb" : { "db_type": 126, "ud_type": "articleThumbnail", "isContainer":1},
         "div.part":{
             "label":"view","label_FR":"vue",
             "db_type":4,
@@ -44,7 +45,7 @@ const UD_register = {
                     "type":{"tag":"p","value":"=selectorTag( api( 'getTagOrStyleInfo', 'div.part', 'subTypes'),'','{!Selectionner le type de vue!}');"},
                     "layout":{"tag":"p","value":"=selectorTag( api( 'availableLayoutsForExTag', 'div.part'),'', '{!Selectionner la disposition!}');"},
                     "validate":{"tag":"p","value":[
-                        "La vue n'est crée que lors de la validation.",
+                        "La vue n'est créée que lors de la validation.",
                         "",
                         {"tag":"span","class":"button","onclick":"API.setupView();","value":"Valider"}
                       ]}
@@ -235,7 +236,14 @@ const UD_register = {
             "displayable":1,
             "editable":1, "earlyInit":1,
             "viewTypes" : [ "doc", "model", "clipboard", "style", "public"],
-            "defaultContent":"Click to select.Long click for multiple selection.",
+            "defaultContent":{
+                "image" : { "tag":"image", "src":"https://www.sd-bee.com/upload/O0W1b3s20_logosite.png"},
+                "search" : { "tag":"span", "class":"field image-tags", "type":"field", "stage":"on", "spell":"false", "placeholder":"tags"},
+                "link" : { 
+                    "tag":"span", "class":"field image-link", "type":"field", "stage":"on",
+                    "spell":"false", "placeholder":"link", "valid":"$$$.addLinkToImage('{name}');"
+                }
+            },
             "defaultContentByClassOrViewType":{}
         },
         "div.table":{
@@ -293,7 +301,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"Text{AutoIndex_text}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.server":{
             "label":"server",
@@ -320,11 +329,12 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"Style{AutoIndex_css}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.js":{
             "label":"js", "icon": "js.png",
-            "db_type":18, "icon": "",
+            "db_type":18, 
             "ud_type":"js", "isContainer":0, "forceClasses":"linetext",
             "displayable":1, "editable":1, "useTextEditor":1, "addTextEditor":1, 
             "viewTypes":["data", "system", "middleware", "style", "program"],
@@ -332,7 +342,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"JS{AutoIndex_js}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
             
         },
         "div.json":{
@@ -340,12 +351,13 @@ const UD_register = {
             "db_type":19, "icon": "settings.png",
             "ud_type":"json", "isContainer":0, "forceClasses":"linetext",
             "displayable":1, "editable":1, "useTextEditor":1,
-            "viewTypes":["data", "system", "middleware", "pageStyle", "style", "program"],
+            "viewTypes":["doc", "data", "system", "middleware", "pageStyle", "style", "program"],
             "classesByViewType":{ 
                 "default":["standard"]
             },
             "defaultContent":"JSON{AutoIndex_json}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.api":{
             "label":"API",
@@ -357,7 +369,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"Server{AutoIndex_apiCall}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.resource":{
             "label":"resource",
@@ -369,7 +382,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"Resource{AutoIndex_resource}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
 
         },
         "div.chart":{
@@ -418,7 +432,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"HTML{AutoIndex_html}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.filledZone":{
             "label":"filled zone", "label_FR":"zone remplie",
@@ -430,7 +445,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"HTML{AutoIndex_html}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.html":{
             "label":"HTML", "label_FR":"HTML",
@@ -442,7 +458,8 @@ const UD_register = {
                 "default":["standard"]
             },
             "defaultContent":"HTML{AutoIndex_html}",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.emailTemplate2Col":{
             "label":"HTML email template", "label_FR":"Modèle email HTML",
@@ -467,7 +484,8 @@ const UD_register = {
                 "default":["standard", "dataset", "spreadsheet"]
             },
             "defaultContent":"__UNDEFINED__",
-            "defaultContentByClassOrViewType":{}
+            "defaultContentByClassOrViewType":{},
+            "autoAddAttributes":{"spellchecking":"false"}
         },
         "div.connector.csv":{ 
             "label":"CSV",
@@ -611,7 +629,7 @@ const UD_register = {
             "ud_type": "zone", "isContainer": 1,
             "viewTypes":["doc", "synopisis", "model", "language"],
             "classesByViewType":{ 
-                "default":["standard", "LAY_flex", "theme1", "theme2", "theme3"]
+                "default":["standard", "text-only", "LAY_flex", "theme1", "theme2", "theme3"]
             },
             "defaultContent":{
                 "caption":{ "tag":"span", "class":"caption", "value":"Zone{AutoIndex_zone}"},
@@ -637,7 +655,7 @@ const UD_register = {
             "displayable":0, "editable":0,
             "insertable":"inside",
             "classesByViewType":{ 
-                "default":["standard", "styled", "emphasized", "quoted", "centered"]
+                "default":["standard", "styled", "emphasized", "quoted", "centered", "topic"]
             }
         },
         "span.caption":{
@@ -663,7 +681,7 @@ const UD_register = {
             "label":"styled","label_fr":"stylé",
             "displayable":0, "editable": 1, "insertable":"inside",
             "classesByViewType":{ 
-                "default":["emphasized", "quoted"]
+                "default":["emphasized", "quoted", "topic", "audience"]
             }
         },
         "span.drawstyle":{
@@ -715,14 +733,20 @@ const UD_register = {
                 "default":["standard"]
             },
             "insertableTags":{ "field":"span.field","link":"span.link","styled":"span"},
-            "displayable":1, "editable":1, "editableInside":1
+            "displayable":1, "editable":1, "editableInside":1,
+            "defaultContent":"...",
+            "defaultContentByClassOrViewType":{}
         },
         "td":{
             "insertableTags":{"field":"span.field","link":"span.link","styled":"span"},
-            "displayable":1, "editable":1, "editableInside":1
+            "displayable":1, "editable":1, "editableInside":1,
+            "defaultContent":"...",
+            "defaultContentByClassOrViewType":{}
         },
         "th":{
-            "displayable":1, "editable":1, "editableInside":1
+            "displayable":1, "editable":1, "editableInside":1,
+            "defaultContent":"Title", "defaultContent_FR":"Titre",
+            "defaultContentByClassOrViewType":{}
         },
         "LAY_left":{
             "label":"left", "label_FR":"à gauche",
@@ -746,13 +770,14 @@ const UD_register = {
             "UD_docParams": "UD_docParams_object",
             "UD_currentDocument" : "me"
         },
-        "UD_editorTemporaryClasses" : [ "edit", "editing", "stageediting", "edcontainer", "edinside", "hidden", "menu-on"]
+        "UD_editorTemporaryClasses" : [ "edit", "editing", "stageediting", "edcontainer", "edinside", "hidden", "menu-on", "selected"]
     },
     "UD_parameters" : {
         "service" : "webdesk",
         "buildManageOnClientSide" : true,
         "dummyText" : "...",
         "computingText" : "...",
+        "comment-key-in-JSON" : "__comments__",
         "languageCodes" : [ "EN","FR"],
         "newViewId" : "_NEW_VIEW_ID",
         "register" : {
@@ -761,7 +786,8 @@ const UD_register = {
         "elementUpdateAction" : "AJAX_update",
         "required_modules" : [],
         "public-resource-storage" : "",
-        "private-resource-storage": ""
+        "private-resource-storage": "",
+        "css-cache-space":"tmp/cssCache"
     },
     "UD_services" : {
         "TextGen" : { "path": "services/NLP", "prefix":"UDT"}

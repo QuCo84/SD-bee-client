@@ -12,6 +12,8 @@ class UDEclickHandler {
     editor = null;
     dom = null;
     topDocument = null;
+    mouseDownTime = 0;
+    mouseUpTime = 0;
     
     constructor( editor) {
         this.editor = editor;
@@ -78,6 +80,10 @@ class UDEclickHandler {
             if ( !processed && this.editor.requires2stageEditing( element)) element = this.editor.editingElement;
         } else if ( editable) {
             // PROCESS A CLICK ON AN EDITABLE ELEMENT
+            if ( this.cursor.HTMLelement != element && !element.contains( this.cursor.HTMLelement) && !this.cursor.HTMLelement.contains( element)) {
+                // Change of element
+                this.editor.dispatchEvent( { event:'click outside'}, this.cursor.HTMLelement);
+            }
             // Update cursor shadow
             this.cursor.fetch();
             // Give element's editor module a chance to handle the event
@@ -108,22 +114,30 @@ class UDEclickHandler {
     }  // UDE.clickEvent()  
 
    /**
-    * Return true if element is clickable and to be handled by browser
+    * Return true if click handled by browser
     */ 
     handledByBrowser( element) {
-        // 2DO look up to document or saveable for a
-        return (
-            this.dom.parentAttr( element, 'onclick') != ""
-            || ( element.tagName == "A" && ( element.parentNode.tagName != "SPAN" || !$$$.testEditorAttr( element, 'ude_edit'))) //test221125
-            || ( element.parentNode && element.parentNode.tagName == "A")
-            || element.tagName == "INPUT" 
-        )
-   }
+        let parent = element.parentNode;
+        let r = false;
+        if ( parent && parent.tagName == "SPAN" && element.parentNode.classList.contains( 'link')) {
+            // Clickable element inside span.link - check if editable
+            r = ( element.tagName == "A" && !$$$.testEditorAttr( element, 'ude_edit'));
+        } else {
+            // Other clickable elements
+            r = (
+                this.dom.parentAttr( element, 'onclick') != ""
+                || element.tagName == "A"
+                //|| ( parent && parent.tagName == "A")
+                || element.tagName == "INPUT" 
+            )
+        }
+        return r;
+    }
 
-   /**
-    * Return true if element is inside an action box (or User Interface)
-    */ 
-   insideActionBox( element) {
+    /**
+     * Return true if element is inside an action box (or User Interface)
+     */ 
+    insideActionBox( element) {
         let container = this.dom.getParentWithAttribute( 'ud_type', element,);
         return (( container) ? container.classList.contains( 'actionBox') : false);
    }
@@ -151,19 +165,26 @@ class UDEclickHandler {
     * @returns {boolean} Process event
     */ 
     monitorAndFilter ( e, editable, element) {
+        /**
+         * Testing with preventDefaults removed 
+         * This function should just decide wether we want to handle the event or not
+         */
         if ( element.tagName == "INPUT" || this.attr( element, 'onclick')) return true;
         switch ( e.type) {
             case "mousedown" :
                 this.mouseDownTime = this.editor.ticks;
-                if ( !editable)  e.preventDefault();
+                // if ( !editable)  e.preventDefault();
                 return false;                
             case "mouseup" :
                 this.mouseUpTime = this.editor.ticks;
-                if ( !editable) e.preventDefault();
+                // if ( !editable) e.preventDefault();
                 return false;
             case "touchstart" :
                 this.editor.touchMove = false;
-                if ( !editable) e.preventDefault();
+               /*
+                * !!! IMPORTANT touchstart needed for screen scrolling
+                * if ( !editable) e.preventDefault();
+                */
                 return false; 
             case "touchend" :
                 if (this.editor.touchMove) return false;
@@ -196,6 +217,23 @@ class UDEclickHandler {
                 if ( clickedElement.id == "document") break;
             }
         }         
+        // Check click is not inside an anchor
+        let walk = element;
+        let safe = 20;
+        while ( !walk.id && walk.tagName != 'A' && --safe) walk = walk.parentNode;
+        if ( safe && walk.tagName == 'A') {
+            let clickTime = this.editor.ticks - this.mouseDownTime;
+            let href = this.dom.attr( walk, 'href');
+            if ( e.type == 'mouseup' && href) {
+                if ( clickTime > 18 && clickTime < 50)  {
+                    // 2023-12-13 for newsletter, interprete link               
+                    window.open( href, 'article');
+                    return walk;
+                }
+            }
+            // IDEA banner message if mousedown, press for 1s to follow link
+        }
+        // Check click is not on top doc        
         if ( element == this.topDocument) {
             // Neutralise clicks on container element
             e.preventDefault(); 
@@ -294,10 +332,10 @@ class UDEclickHandler {
 if ( typeof process == 'object') {
     // Running on node.js
     module.exports = { UDEclickHandler: UDEclickHandler};
-    if ( typeof JSDOM == "undefined" && typeof window == "undefined")  {
+    if ( typeof global.JSDOM == "undefined" && typeof window == "undefined")  {
         // Auto-test module
         // Setup test environment
-        var envMod = require( '../../tests/testenv.js');
+        var envMod = require( '../tests/testenv.js');
         envMod.load(); 
         //console.log( typeof global.JSDOM);
         // Test this module

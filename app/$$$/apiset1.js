@@ -53,13 +53,13 @@ class UDapiSet1
             this.utilities = API.utilities;
             API.addFunctions( this, [
                 "addStyleRules", "addToHistory", "addTool", 
-                "back", "botlogUpdate", "buildPartEditing",
+                "back", "botlogUpdate", "botlog", "buildPartEditing",
                 "clearTools",
                 "initialiseElement", "insertElement", "insertHTML", "insertTable", 
                 "loadDocument", "createDocument",  
                 "loadModule", "loadTool", "postForm",       
                 "reload", "reloadView", "removeElement",
-                "setModel", "setStyle", "setSystemParameters", "setUDparam", "env",
+                "setModel", "setStyle", "setSystemParameters", "getUDparam",  "setUDparam", "env",
                 "translateTerm", "switchView", "configureElement", "HTMLeditor",
                 "displayDocInPanel", "goTo", "getView", "showMenu", "clearMenu",
                 "displayTip", "addTip", "hoverOver", "clickOn", "addView", "setupView",
@@ -232,17 +232,21 @@ class UDapiSet1
     */    
     loadDocument( url, tab="")
     {
-        // 2DO take into account open docs in new tab (if tab = auto maybe)
+        // Take into account open docs in new tab (if tab = auto maybe)
         let newWindowCheckbox = API.dom.element( 'UD_openNewWindow');
         let newWindow = ( !newWindowCheckbox || newWindowCheckbox.value == "yes");
-        // show AJAX_show has /
-        if ( !newWindow && ( this.unitTesting || url.indexOf( 'AJAX_') > -1))
+        if ( !newWindow || ( this.unitTesting || url.indexOf( 'AJAX_') > -1))
         {
             // Use AJAX
-            let urlParts = url.split( '/'); // http(s):/ /domain/service/oid/action/params..//.
-            let uriParts = urlParts.splice( 3, urlParts.length - 3);
-            let uri = uriParts.join('/');           
-            let context = { action: "refresh", element: this.topElement, zone:"document"};
+            let uri = url.replace('/show/', '/AJAX_show/');
+            if ( uri.indexOf( 'http') > -1) {
+                // Remove  http(s)://domain/service/oid/action/params.. (must be to sd bee server for AJAX)
+                let urlParts = url.split( '/'); 
+                let uriParts = urlParts.splice( 3, urlParts.length - 3);
+                uri = uriParts.join('/');
+            }
+            // 
+            let context = { action: "refresh", element: this.dom.topElement, zone:"document"};
             this.udajax.serverRequest( uri, "GET", "", context);
         }
         else if( newWindow && tab) {
@@ -379,6 +383,20 @@ class UDapiSet1
                 element.remove();
             }
             this.ud.viewEvent( 'change', saveable);
+            if ( exTag == 'div.part') {
+                // View removal
+                // Find corresponding switch
+                let viewName = this.dom.attr( element, 'name');
+                let switchName = viewName.toLowerCase().replace( / /g, '_')+"sel";  
+                let switchEl = this.dom.element( switchName);
+                if ( switchEl) {
+                    // Switch to previous or next view
+                    if ( switchEl.previousSibling) $$$.clickOn( switchEl.previousSibling);
+                    else if ( switchEl.nextSibling) $$$.clickOn( switchEl.nextSibling);
+                    // Remove swicth
+                    switchEl.remove();
+                }
+            }
         }
    } // UniversalDoc.removeElement()
    
@@ -504,7 +522,7 @@ class UDapiSet1
         // Send request to server
         this.udajax.serverRequest( call, "POST", postData, context, null); 
         // Setup waiting         
-        let html = '<div style="text-align:center"><img src="/upload/3VUvtUCVi_processing.gif">';
+        let html = '<div style="text-align:center"><img src="https://www.sd-bee.com/upload/3VUvtUCVi_processing.gif">';
         html += '<br>Initialisation de la page avec '+modelName+'.</div>';
         this.ud.topElement.innerHTML = html;
         window.scrollTo( 0, 0);
@@ -630,14 +648,13 @@ class UDapiSet1
 
     
    /**
-    * @api {JS} API.translateTerm(term) Translate a term to current language
+    * @api {JS} API.translateTerm(term,translateEverything,setTranslation) Translate a term to current language
     * @apiParam {string} term The term to translate
     * @apiParam {boolean} translateEverything If true (default) translate as phrase, otherwise translate terms between {! and !}
     * @apiParam {string} setTranslation Store translated value for future use
     * @apiSuccess {string} Translated term 
     * @apiGroup Text or HTML
     */
-    // 2DO remove translateEverything
     translateTerm( term, translateEverything = true, setTranslation = "") {
         if ( !term) return "";
         let translation = "";
@@ -797,9 +814,13 @@ class UDapiSet1
             // Return formatted botlog
         } else if ( action == "set") {
             if (  typeof botlog.log[ id] == "undefined")
-                botlog.log[ id] = { status:status, details:details, start:this.ticks, update:ticks};
-            else     
-                botlog.log[id] = { status:status, details: botlog.log[id].details+"\n"+details, update:ticks};
+                botlog.log[ id] = { status:status, details:details, start:ticks, update:ticks, error: false};
+            else {    
+                botlog.log[id].status = status;
+                botlog.log[id].details =  botlog.log[id].details +"\n"+details;
+                botlog.log[id].update = ticks;
+            }
+            //botlogZone.innerHTML += "<br>At: " + window.ud.ticks + "Robot: "+ id + "status:" + ((status) ? 'OK' : 'KO') + "details:" + details;    
         } else if ( action == "busy") {
             let busy = false;
             for ( let logId in botlog.log) {
@@ -808,9 +829,12 @@ class UDapiSet1
                     if ( bl.update - bl.start > 50) bl.error = true; else bl.error = false;
                     busy = true; 
                 } else {
-                    botlogContent.push( bl.details);
+                    let log = $$$.calculate( "datestr( '', '', 'YYYY-MM-DD-hh:mm');");
+                    log += ' ' + logId + ' ' + (( bl.error) ? 'KO' : 'OK') + ' ' + 'in ' + ( (bl.update- bl.start)/10) + ' s ' + bl.details;
+                    botlogContent.push( log);
                     delete botlog.log[ logId];
                     botlogZone.innerHTML = botlogContent.join( "<br>");
+                    $$$.setChanged( botlogZone);
                 }                
             }
             // Too frequent return debug ( {level:5, return:busy, coverage:26, file:"apiset1.js"}, "botlogUpdate action:", action);
@@ -863,7 +887,49 @@ class UDapiSet1
             }
 			debug( { level:5, coverage:41, file:"apiset1.js"}, "botlogUpdate action:", action); 
         }
-    } // UD.botlogUpdate()
+    } // $$$.botlogUpdate()
+
+    /**
+    * @api {JS} API.botlog( id, busy, details) Store a botlog operation
+    * @apiParam {string} id Id of bot operation
+    * @apiParam {string} busy True if robot is busy
+    * @apiParam {string} details Details of operation
+    * @apiGroup Robots
+    */
+    botlog( id, busy, details) { this.botlogUpdate( 'set', id, busy, details);}
+
+    /**
+    * @api {JS} API.getUDparam(param) Get parameter on current UD
+    * @apiParam {string} param The name of the parameter
+    * @apiGroup Documents
+    * @apiSuccess {mixed} Return The value set
+    */
+    getUDparam( param) {   
+        // Look up in doc's paramaters (stored in textra field under system)
+        let val = null;
+        if ( typeof window.udparams == 'undefined') {
+            // Parameter editing table not available yet, so read directly from resource element
+            let system = this.dom.udjson.parse( 'UD_system');
+            if ( typeof system[ param] != 'undefined') val = system[ param];
+        } else {
+            // Check manage view is available
+            $$$.buildManagePart();
+            // Get doc parameter management
+            let paramObj = this.dom.element( UD_wellKnownElements['UD_docParams']);
+            if ( paramObj) {
+                let paramObjData = this.dom.udjson.parse( paramObj.textContent);
+                if ( !paramObjData) { return null;}
+                let params = paramObjData.data.value;          
+                if ( typeof params[ param] != 'undefined') val = params[ param];
+            }
+        }
+        if ( !val) {
+            // Look up global paramater send in resource section
+            let globals =  this.dom.udjson.parse( 'UD_globals');
+            if ( globals && typeof globals[ param] != "undefined") val = globals[ param];            
+        }
+        return val;
+    } 
     
    /**
     * @api {JS} API.setUDparam(param,value) Set parameter on current UD
@@ -927,12 +993,12 @@ class UDapiSet1
     * @apiGroup Documents
     * @apiSuccess {mixed} Return The value set
     */
-    createDocument( name = "Nouvelle  tâche", shortDescription = "Description courte", model = "", dirName = "") {
+    createDocument( name = "Nouvelle tâche", shortDescription = "Description courte", model = "", dirName = "") {
         // 2DO Input name if required using variable prompt
         // Popup waiting
         let popup = this.dom.element( "system-message-popup");
         if ( popup) {
-            popup.innerHTML = '<div style="text-align:center"><img src="/upload/3VUvtUCVi_processing.gif"></div>';
+            popup.innerHTML = '<div style="text-align:center"><img src="https://www.sd-bee.com/upload/3VUvtUCVi_processing.gif"></div>';
             popup.classList.add( 'show');
         }
         // Translate parameters with {!...!} syntax
@@ -969,12 +1035,12 @@ class UDapiSet1
         postdata += "form="+form;
         postdata += "&input_oid="+oidStr;
         // UD element info
-        postdata += "&stype=2&nstyle=&tgivenname="+name;
+        postdata += "&stype=2&tgivenname="+name;
         postdata += "&tcontent="+shortDescription;
         postdata += "&nstyle="+model;
         postdata += "&textra="+ JSON.stringify( { system:{ state:"new"}});
         // URL to call
-        let call = "/webdesk/"+oidStr+"/AJAX_addDirOrFile/e%7CcreateAndOpen/p1%7Cfile/";
+        let call = '/' + UD_SERVICE + '/' + oidStr + '/AJAX_addDirOrFile/e%7CcreateAndOpen/p1%7Cfile/';
         // Prepare context for response handling
         let context = { action:"fill zone", zone: "left-tool-zone",  setCursor:false, ud:this.ud};         
         let me = this;
@@ -1014,8 +1080,20 @@ class UDapiSet1
         context2.resolve = ( (context2)=>{
             console.log( "then APIset1", context2);
             this.createDocument3( context2);
-         });  
+        });  
+        // Send request to server        
         this.ud.udajax.serverRequest( call, "POST", postdata, context2);
+        // Display waiting
+        let p1 = postdata.indexOf( 'nstyle=');
+        let p2 = postdata.indexOf( '&', p1);
+        let model = postdata.substring( p1 + 7, p2);
+        let T = $$$.getShortcut( "translateTerm");
+        let html = '<div style="text-align:center"><img src="https://www.sd-bee.com/upload/3VUvtUCVi_processing.gif"><br>';
+        html += T( 'Initialisation de la page');
+        if ( model) html += ' ' + T('avec') + ' ' + model;
+        html += '.</div>';
+        this.topElement.innerHTML = html;
+        window.scrollTo( 0, 0);
     }
     createDocument3( context) {
         let popup = this.dom.element( "system-message-popup");
@@ -1038,6 +1116,7 @@ class UDapiSet1
     * @apiSuccess {boolean} True
     */
     switchView( viewName, switchName="") {
+        if ( !this.dom.elementByName( viewName)) return false;
         let switchEl = (switchName) ? API.dom.element( switchName) : null;
         if ( switchEl && switchEl.classList.contains( UD_wellKnownClasses.active)) {
             // View already active so display menu
@@ -1111,12 +1190,17 @@ class UDapiSet1
         API.dom.arrangeTables( view); 
         // Check paging
         API.paginate( view);
+        // 2DO Hook $$$.view_load_{viewname}
+        if ( typeof global[ 'view_load_' + viewName] == "function") global[ 'view_load_' + viewName]();
     } // API switchView()
     
     buildView( viewName) {
         if ( viewName.toLowerCase() == "manage") $$$.buildManagePart();
-        else if ( typeof $$$[ 'build_' + viewName + '_view'] == 'function')
+        else if ( $$$.isFunction( 'build_' + viewName + '_view'))
             $$$[ 'build_' + viewName + '_view']();
+        else if ( $$$.isFunction( 'build_view'))
+            $$$[ 'build_view']( viewName);
+        // else $$$.buildDefaultViewHeader( viewName);
     }
 
    /**
@@ -1388,7 +1472,7 @@ class UDapiSet1
         // Views are not saved until they are configured
         // Find or create view
         let tempName = "_NEW_VIEW_ID";
-        let attr = { id:tempName, name:"_NEW_VIEW_NAME", class:"part unconfigured", ud_type:"part"};
+        let attr = { id:tempName, name:"_NEW_VIEW_NAME", class:"part unconfigured", ud_type:"part", ude_edit:"on"};
         let view = this.dom.element( tempName);
         if ( !view) {
             view = API.dom.insertElement( "div", "", attr, this.dom.element( 'document'), false, true);
@@ -1441,7 +1525,7 @@ class UDapiSet1
         let view = API.dom.element( tmpId);
         let page = view.childNodes[0];
         if ( API.dom.attr( page, 'ud_type') != "page") { page = view;}
-        // Read config data and set in view        
+        // Extract view's config from elements in temporary view        
         let children = page.childNodes;
         let name = "";
         let description = ""; 
@@ -1452,7 +1536,7 @@ class UDapiSet1
            let child = children[ childi];
            let value = child.textContent;
            switch (child.id.replace( tmpId, "")) {
-                case 'name' : name = value; break;
+                case 'name' : name = value.replace( / /g, '-'); break;
                 case 'describe' : description = value; break;
                 case 'type' : 
                     let typeEl = this.dom.element( tmpId + 'type');
@@ -1471,18 +1555,19 @@ class UDapiSet1
                     break;
            }          
         }
+        // Delete elements in view
         for ( let childi=children.length-1; childi >= 0; childi--) {  children[ childi].remove();}
-        // Set view no. Create event on view element
+        //if ( page) page.remove();
+        // Get view's id
         view.className = "part " + type.replace( / /g, '_') + " LAY_" + layout.replace( / /g, '_') + " " + className;
         let viewNo = API.getTagOrStyleInfo( 'div.part.'+type, 'nextId');
-        // 2DO needs a fct
+        // Update next id for views
         API.json.valueByPath( 
             UD_exTagAndClassInfo, 
             'div.part.'+type+'/nextId', 
             ( parseInt( viewNo, 32) + 1).toString( 32)
         );
-        // let viewNo = API.json.value( 'UD_nextViewIds', type, null, 'incrementAfterBase32');
-        // if ( isNaN( viewNo)) viewNo = API.json.value( 'UD_nextViewIds', type);
+        // Set views's id and save to server
         view.id = ('B' + ('00'+viewNo).slice( -2) + '0000000000' + ("00000"+this.ud.userId).slice(-5)).toUpperCase(); 
         API.dom.attr( view, 'name', name);
         API.dom.attr( view, 'ud_subtype', type);

@@ -77,8 +77,8 @@
            let screenWidth = ( forceBigScreen) ? 1200 : screen.innerWidth;
            if (!screenWidth) screenWidth = screen.availWidth;
            console.log( "window.scrollY:"+scrollY+", screenWidth:"+screenWidth);
-           if ( w1 == "0px" && ( screenWidth > this.mobileModeMaxWidth || w2 == "0px") && c1)
-           {
+           if ( w1 == "0px" && ( screenWidth > this.mobileModeMaxWidth || w2 == "0px") && c1) {
+             // open zone 1
              this.element1.style.width = window.getComputedStyle(this.element1)['max-width'];
              this.element1.style.top = scrollY+"px";
              if ( scrollY) {
@@ -87,20 +87,25 @@
              }
              var toolZone  = this.element1.querySelector( "div.tool-zone");
              toolZone.style.display = "block";
-             setTimeout( function(){leftColumn.closeAll( true);}, this.stayOpenTime);
+             let me = this; 
+             setTimeout( function(){ me.element2.closeAll( true);}, this.stayOpenTime); 
+              //setTimeout( function(){leftColumn.closeAll( true);}, this.stayOpenTime);
            }             
-           else if ( w1 != "0px" && ( screenWidth >= this.mobileModeMaxWidth || w2 == "0px") && c2)
-           {
-            // if ( screenWidth < this.mobileModeMaxWidth)
-             {
-                 this.element2.style.width = window.getComputedStyle(this.element2)['max-width'];
-                 var toolZone  = this.element2.querySelector( "div.tool-zone");
-                 toolZone.style.display = "block";
-                setTimeout( function(){rightColumn.closeAll( true);}, this.stayOpenTime);                 
-             }
+           else if ( w1 != "0px" && ( screenWidth > this.mobileModeMaxWidth || w2 == "0px") && c2) {
+             // close zone 1
              this.element1.style.width = "0px";
              var toolZone  = this.element1.querySelector( "div.tool-zone");
              toolZone.style.display = "none";
+             // open zone 2 if mobile mode
+             if ( screenWidth < this.mobileModeMaxWidth) {
+                 this.element2.style.width = window.getComputedStyle(this.element2)['max-width'];
+                 var toolZone  = this.element2.querySelector( "div.tool-zone");
+                 toolZone.style.display = "block";
+                let me = this; 
+                setTimeout( function(){ me.element2.closeAll( true);}, this.stayOpenTime);    
+                //setTimeout( function(){ rightColumn.closeAll( true);}, this.stayOpenTime);                 
+             }
+             
              // Clean up current tool stuff (sleep)
              // 2DO save stuff for when you awaken tool
              // Quick fix trial for disabling outline

@@ -1,17 +1,25 @@
-call testjs app/helpers/dom.js
-call testjs app/helpers/domvalue.js
-call testjs app/helpersdomcursor.js
-call testjs app/helpers/udajax.js
-call testjs ud-view-model udconstants.js
-call testjs ud-view-model ud.js
-REM call testjs ud-view-model udmodules.js
-call testjs ude-view udeconstants.js
-call testjs ude-view ude.js
-call testjs ude-view udecalc.js
-call testjs ude-view udecalc_css.js
-call testjs ude-view udemenu.js
-call testjs ude-view udeideas.js
-call testjs ude-view udelayout.js
+call testjs app ud.js
+call testjs app ude.js
+call testjs app/calculator udecalc.js
+call testjs app/config udeconstants.js
+call testjs app/config udconstants.js
+call testjs app/helpers dom.js
+call testjs app/helpers domvalue.js
+call testjs app/helpers domcursor.js
+call testjs app/helpers udajax.js
+call testjs app/helpers udeclickhandler.js
+call testjs app/helpers udemenu.js
+call testjs app/helpers udeideas.js
+call testjs app/helpers udelayout.js
+call testjs app/helpers udestyles.js
+call testjs app/$$$ udapi.js
+call testjs app/$$$ apiset1.js
+call testjs app/$$$ apiset2.js
+call testjs app/$$$ apiset3.js
+call testjs app/$$$ udjson.js
+call testjs app/$$$ udutilities.js
+call testjs app/$$$ udmodule.js
+call testjs modules/calculator udecalc_css.js
 call testjs modules/editors udelist.js
 call testjs modules/editors udetable.js
 call testjs modules/editors udetext.js
@@ -25,9 +33,5 @@ call testjs modules/tools inserter.js
 call testjs modules/tools rollbacker.js
 call testjs modules/tools styler4editor.js
 call testjs modules/udchart udechart.js
-call testjs ud-utilities udjson.js
-call testjs ud-utilities udutilities.js
-call testjs api udapi.js
-call testjs api apiset1.js
-call testjs api udmodule.js buildpage.js
-call testjs api udmodule.js taskman.js
+call testjs modules/$$$ udehooks.js
+

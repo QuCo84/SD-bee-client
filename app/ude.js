@@ -1,22 +1,5 @@
 /**
- * ude.js -- Universal Doc Editor
- *  Copyright (C) 2023  Quentin CORNWELL
- *  
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-/**
+ *   ude.js
  *
  *   <p>The UDE class implements an HTML editor using the browser's contenteditable functionality.</p>
  *   <p>UDE stands for Universal Doc Editor as the editor calls specific modules to handle a 
@@ -64,6 +47,12 @@ var UDE_attributes = [ // These are the attributes of individual HTML elements. 
 ];
 
 /**
+ * Globals for useful images
+ */
+var UDE_processingIcon = null;
+var UDE_logo = null;
+
+/**
  * JS class UDE
  */
 /**
@@ -96,19 +85,19 @@ class UDE
         // HTML calculator      
         //calc:{ src:"intern", state:"loaded", onload:'new UDEcalc( this.dom, this);', instance:null, className:'UDEcalc'},
         // UDEtable class for table edition
-        'div.table':{ src:"app/elements/udetable.js", state:"required", onload:'new UDEtable( window.ude.dom, window.ude);', instance:null, extags:'div.table', className:'UDEtable'},
+        'div.table':{ src:"modules/editors/udetable.js", state:"required", onload:'new UDEtable( window.ude.dom, window.ude);', instance:null, extags:'div.table', className:'UDEtable'},
         // UDEtext class for line text edition
-        'div.linetext':{ src:"app/elements/udetext.js", state:"required", onload:'new UDEtext( window.ude.dom, window.ude);', instance:null, extags:'div.linetext', className:'UDEtext'}, 
+        'div.linetext':{ src:"modules/editors/udetext.js", state:"required", onload:'new UDEtext( window.ude.dom, window.ude);', instance:null, extags:'div.linetext', className:'UDEtext'}, 
         // UDElist class for list edition
-        'div.list':{ src:"app/elements/udelist.js", state:"required", onload:"new UDElist( window.ude.dom, window.ude);", instance:null, extags:'div.list', className:'UDElist'},
+        'div.list':{ src:"modules/editors/udelist.js", state:"required", onload:"new UDElist( window.ude.dom, window.ude);", instance:null, extags:'div.list', className:'UDElist'},
         // UDEdraw class for graphics edition        
-        'div.graphic':{ src:"app/elements/udedraw.js", state:"required", onload:'new UDEdraw( window.ude.dom, window.ude);', instance:null, extags:'div.graphic', className:'UDEdraw'},
+        'div.graphic':{ src:"modules/editors/udedraw.js", state:"required", onload:'new UDEdraw( window.ude.dom, window.ude);', instance:null, extags:'div.graphic', className:'UDEdraw'},
         // UDEchart class for chart display
-        'div.chart':{ src:"app/elements/udechart.js", state:"required", onload:"new UDEchart( window.ude);", instance:null, extags:'div.chart', className:'UDEchart'},
-        'Udapi':{ src:"app/$$$/udapi.js", state:"required", onload:"new UDapi( window.ude);", instance:null, extags:'', className:'UDapi'},
-        'div.html':{ src:"app/elements/udehtml.js", state:"required", onload:"new UDEhtml( window.ude);", instance:null, extags:'div.html', className:'UDEhtml'},
-        'div.connector':{ src:"app/elements/udeconnector.js", state:"required", onload:"new UDEconnector( window.ud);", instance:null, extags:'div.connector', className:'UDEconnector'},
-        'div.video':{ src:"app/elements/udevideo.js", state:"required", onload:"new UDEvideo( window.ud);", instance:null, extags:'div.video', className:'UDEvideo'},
+        'div.chart':{ src:"modules/udchart/udechart.js", state:"required", onload:"new UDEchart( window.ude);", instance:null, extags:'div.chart', className:'UDEchart'},
+        'Udapi':{ src:"ud-view-model/udapi.js", state:"required", onload:"new UDapi( window.ude);", instance:null, extags:'', className:'UDapi'},
+        'div.html':{ src:"modules/editors/udehtml.js", state:"required", onload:"new UDEhtml( window.ude);", instance:null, extags:'div.html', className:'UDEhtml'},
+        'div.connector':{ src:"modules/connectors/udeconnector.js", state:"required", onload:"new UDEconnector( window.ud);", instance:null, extags:'div.connector', className:'UDEconnector'},
+        'div.video':{ src:"modules/players/udevideo.js", state:"required", onload:"new UDEvideo( window.ud);", instance:null, extags:'div.video', className:'UDEvideo'},
         /* 'siteExtract':{ src:"modules/connectors/udcsiteextract.js", state:"required", onload:"new UDC_siteExtract( window.ud);", instance:null, extags:'div.connector.site', className:'UDC_siteExtract'}, */       
     }; 
     virtualKeyboardMaxTime = 15; // ms
@@ -236,7 +225,7 @@ class UDE
                 'changeTagOnCurrent', 'changeTag', 'changeClassOnCurrent', 'changeSubType', 
                 'changeClass', 'toggleClass', 'setAttribute', 'insertElement', 'updateElement', 'updateTable', 'removeElement', 'followScroll', 
                 'initialiseElement', 'loadScript', 'getEditType', 
-                'setChanged', 'insertTextAtCursor', 'insertHTMLatCursor',
+                'setChanged', 'insertTextAtCursor', 'replaceTextAtCursor', 'insertHTMLatCursor',
                 'isLongClick', 'dispatchEditEvent', 'clearClasses',
                 'requires2stageEditing', 'leave2stageEditing', 'is2stageEditing'
             ]);
@@ -396,7 +385,14 @@ class UDE
         else this.textEd = this.modules[exTag]['instance']= new UDEtext( this.dom, this);
         
         window.rollbacker = null;
-    
+
+        // intilaise useful images
+        let iconHolder = API.dom.element( 'UD_icons');
+        if ( iconHolder) { 
+            let icons = API.dom.udjson.parse( iconHolder.textContent);
+            UDE_processingIcon = icons[ "Processing"];
+            UDE_logo = icons[ "Logo"];
+        } 
     } // UDE class constructeur()
   
   
@@ -512,8 +508,10 @@ class UDE
         let processed = false;
         if ( e.type == "start") {
             this.dom.topElement.addEventListener( "click", function (event) { window.ude.clickEvent( event);});
+            /* 
             this.dom.topElement.addEventListener( "mousedown", function (event) { window.ude.clickEvent( event);});
             this.dom.topElement.addEventListener( "mouseup", function (event) { window.ude.clickEvent( event);});
+            */
             this.dom.topElement.addEventListener( "touchstart", function (event) { window.ude.clickEvent( event);});
             this.dom.topElement.addEventListener( "touchend", function (event) { window.ude.clickEvent( event);});
             return true;
@@ -735,14 +733,20 @@ class UDE
                     if ( this.ignoreKeyup) processed = true;
                     // else if ( this.is2stageEditing( element)) 
                     // 2-stage editing process - do nothing
-                    else if ( !this.requires2stageEditing( this.dom.cursor.HTMLelement)
-                            && this.dom.getParentAttribute( "", "ude_autosave", this.dom.cursor.HTMLelement) != "off")
+                    if ( !this.requires2stageEditing( this.dom.cursor.HTMLelement)
+                            && this.dom.getParentAttribute( "", "ude_autosave", this.dom.cursor.HTMLelement) != "off") {
                         // Update Rollback function
                         if ( window.rollbacker) 
                             window.rollbacker.inputEvent( {event:"change", content:element.innerHTML}, element); 
                         this.setChanged( element);                 
+                    }
                 }  else if ( e.type == "keydown" || e.type == "keypress" ) {
                     this.ignoreKeyup = false;
+                    // Let element handle 
+                    editEvent = "Key "+ key;
+                    processed = this.dispatchEvent( {event:editEvent, saveable:saveable, displayable:displayable}, element);
+                    editEvent = ""; 
+                    if ( processed) break;
                     let cursor = this.dom.cursor;
                     if ( this.dom.cursor.selectionMultiNode) {
                         // Multiple elements selected - let browser process and indicate element has changed afterwards
@@ -768,13 +772,17 @@ class UDE
                             processed = true;
                             this.dom.cursor.set();
                         }    
-                        if ( this.is2stageEditing( element) && element.textContent && this.dom.cursor.textOffset <= 1) {
-                            // 2-stage editing - Force cursor to stay in same element
-                            element.textContent = element.textContent.substring( 1);
-                            this.dom.cursor.textElement = element.childNodes[0];
-                            this.dom.cursor.set();
-                            processed = true;                        
+                        if ( this.is2stageEditing( element) && element.textContent) {
+                            // 2-stage editing
+                            if ( this.dom.cursor.textOffset <= 1) {
+                                // Force cursor to stay in same element
+                                element.textContent = element.textContent.substring( 1);
+                                this.dom.cursor.textElement = element.childNodes[0];
+                                this.dom.cursor.set();
+                                processed = true;
+                            }  else return; // Let browser handle backspace inside 2 stage editing
                         } else {
+                            // Direct editing
                             let textElement = this.dom.cursor.textElement;
                             let text = (textElement) ? textElement.textContent : "";
                             if ( this.dom.cursor.textOffset == 0 && key == "Backspace") {
@@ -1012,9 +1020,13 @@ class UDE
                 } else {
                     if ( !this.editingElement) {                    
                         // Enter 2 stage editing if required or just mark as changed
-                        if ( key == "Unidentified" || !this.requires2stageEditing( element)) {
-                            // Update Rollback function
-                            if ( window.rollbacker) window.rollbacker.inputEvent( {event:"change", content:element.innerHTML}, element);            
+                        if ( key == "Unidentified" || !this.requires2stageEditing( element)) {                            
+                            if ( window.rollbacker) {
+                                // Update Rollback function
+                                window.rollbacker.inputEvent( {event:"change", content:element.innerHTML}, element);            
+                                // setTimeout( function() { this.dispatchEvent( { event:"change"}, element);}, 100);
+                                // this.dispatchEvent( { event:"change"}, element);
+                            }
                             
                             // Mark element as modified
                             if ( (this.lastChangeElement && element != this.lastChangeElement) || [ ";"].indexOf( key) > -1 ) {
@@ -1036,7 +1048,7 @@ class UDE
                     }                
                     // Event 
                     this.lastChar = key;      
-                    if ( this.hasDefaultContent( element)) {
+                    if ( this.hasDefaultContent( element) && e.type == "keydown") {
                         if ( key == "Unidentified") {
                             element.innerHTML = "";
                         } else {
@@ -1045,11 +1057,20 @@ class UDE
                             this.dom.cursor.textOffset = 1;
                             this.dom.cursor.HTMLoffset = 1;
                             this.dom.cursor.set();
+                            element.classList.remove( 'initialcontent');
                             processed = true;
-                        }
-                        //if ( element.classList.contains( 'undefined')) this.changeTag( 'p', element.id);
+                        }                       
                         //element.classList.remove( 'initialcontent');
                     }   
+                    if ( element.classList.contains( 'undefined')) {
+                        // text character on undefined element => force paragraph
+                        element.classList.remove( 'undefined');
+                        this.changeTag( 'p', element.id);
+                        element.textContent = key;
+                    }
+                    // Handle change events not triggered automatically with contenteditable
+                    let onchange = this.dom.attr( element, 'onchange');
+                    if ( onchange) doOnload( onchange);
                 }
                 break; 
         }
@@ -1072,6 +1093,12 @@ class UDE
         let processed = false;
         if ( e.type == "start") {
             this.dom.topElement.addEventListener('mouseover', function (event) { window.ude.pointEvent( event);});
+            /*
+            // Test col selection (3 lnes)
+            this.dom.topElement.addEventListener('mousedown', function (event) { window.ude.pointEvent( event);});
+            this.dom.topElement.addEventListener('mousemove', function (event) { window.ude.pointEvent( event);});
+            this.dom.topElement.addEventListener('mouseup', function (event) { window.ude.pointEvent( event);});
+            */
             //this.dom.topElement.addEventListener('touchstart', function (event) { window.ude.pointEvent( event);});
             //this.dom.topElement.addEventListener('touchend', function (event) { window.ude.pointEvent( event);});
             this.dom.topElement.addEventListener('mousewheel', function (event) { window.ude.pointEvent( event);});
@@ -1120,8 +1147,8 @@ class UDE
             case "mousedown" :
             case "touchstart" :
                 let path = null;
-                // processed = this.dispatchEvent( {event:e.type, target:target}, target);                
-                processed = this.draw.inputEvent(e, target);
+                processed = this.dispatchEvent( {event:e.type, target:target}, target);                
+                //processed = this.draw.inputEvent(e, target);
                 break;
             case "mouseup" :
             case "touchend" :
@@ -1129,7 +1156,7 @@ class UDE
                 if ( this.drawMouse) {
                     processed = this.draw.inputEvent(e, this.drawMouse);
                     this.drawMouse = null;
-                }
+                } else processed = this.dispatchEvent( {event:e.type, target:target}, target);  
                 break; 
             case "mousewheel" :
                 // processed = this.dispatchEvent( {event:e.type, target:target}, target);                
@@ -1181,8 +1208,9 @@ class UDE
         let editEvents = [];
         let exTag = this.dom.attr( saveable, 'exTag');      
         switch( e.type) {
-            case "paste" :
+            case "paste" :                
                 let pastedData = "";
+                let pastedDataTxt = "";
                 let mime = "";         
                 let lastClip = this.dom.element( "LastClip");
                 if ( lastClip) {
@@ -1196,11 +1224,19 @@ class UDE
                     ) { 
                         mime = 'text/html';
                         pastedData = e.clipboardData.getData('text/html'); 
+                        pastedDataTxt = e.clipboardData.getData('text/plain');
                     } else if  (((types instanceof DOMStringList) && types.contains("text/plain")) 
                        || (types.indexOf && types.indexOf('text/plain') !== -1)
                     ) { 
                         mime = 'text/plain';
                         pastedData = e.clipboardData.getData('text/plain');
+                        if ( this.is2stageEditing( element)) {
+                            // Clear if  default content
+                            if ( $$$.hasDefaultContent( element)) element.textContent = pastedData;
+                            else this.insertTextAtCursor( pastedData);
+                            processed = true;
+                            break;
+                        }
                     }
                 }
                 if ( this.clipboardHandler) { 
@@ -1211,7 +1247,10 @@ class UDE
                         editableType = this.dom.attr( editable, 'ud_subtype');
                     }
                     let useAs = "html";
-                    if ( [ "text", "linetext", "css", "json", "htmltext"].indexOf( editableType) > -1) { useAs = "text";}
+                    if ( [ "text", "linetext", "css", "json", "js", "htmltext", "connector"].indexOf( editableType) > -1) { 
+                        useAs = "text";
+                        if ( pastedDataTxt && editableType != "htmltext") pastedData = pastedDataTxt;
+                    }
                     editEvents = this.clipboardHandler.preparePasteEvents( this.clipboardHandler.preparePastedData( mime, pastedData), useAs);
                 } else  if (pastedData) { editEvent = { event: "paste", type:"paste", data:pastedData, mime:mime};}
                 if ( lastClip) { lastClip.remove();}
@@ -1277,12 +1316,15 @@ class UDE
                 console.log( e);
                 let droppedData = e.dataTransfer.getData( 'text/html');
                 let droppedId = e.dataTransfer.getData( 'text/plain');
-                // Target is 1st element in path with an id
+                // Target is saveable element
                 let targetPath = e.composedPath();
+                target = this.dom.getSaveableParent( targetPath[0]);
+                /* 2DELETE 06/11/23
+                // Target is 1st element in path with an id
                 target = null;
                 for ( let targeti=0; targeti < targetPath.length; targeti++) {
                     if ( targetPath[ targeti].id && !target) target = targetPath[ targeti];
-                }
+                }*/
                 // 2DO set cursor or allow insert to take target
                 if ( target) {
                     let movedElement = this.dom.element( droppedId);
@@ -1426,7 +1468,7 @@ class UDE
                         prevSib.remove();
                         textEl.remove();
                         processed = true;
-                    } else if ( prevSIb && prevSib.nodeType == Node.TEXT_NODE) {
+                    } else if ( prevSib && prevSib.nodeType == Node.TEXT_NODE) {
                         prevSib.textContent += textEl.textContent;
                         textEl.remove();
                         processed = true;                        
@@ -1469,10 +1511,20 @@ class UDE
                 break
             case "insert row" :
             case "newline" :
-                // Insert paragraph after current element
+                // Insert undefined div after current element by default
                 let newElementType = 'div';
-                let className = "undefined"; // "standard";
-                let data = "";                 
+                let className = "undefined";
+                let data = "";  
+                // Check available tags
+                let tags = $$$.availableTags( saveable);
+                if ( tags.length == 1) {
+                    // Only 1 available tag so insert directly
+                    let tag = tags[0];
+                    let tagParts = tag.split( '.');
+                    newElementType = tagParts[0];
+                    className = ( tagParts.length > 1) ? tagParts[1] : 'standard';
+                    data = '...';
+                }                               
                 // Flag if we need to insert after or before
                 let insertBefore = false; 
                 if ( defaultTags.indexOf( exTag) > -1) {
@@ -1493,7 +1545,7 @@ class UDE
                 }
                 let attributes = { class:className};
                 let newElement = this.insertElement( newElementType, data, attributes, saveable, !insertBefore);
-                if ( !data) newElement.innerHTML = $$$.getUndefinedElementContent( newElement);
+                if ( !data && className == "undefined") newElement.innerHTML = $$$.getUndefinedElementContent( newElement);
                 // NO DOne in insertEl Inform VIEW-MODEL of new element
                 // this.dataSource.viewEvent( "create", newElement);
                 // New para becomes edited element with floating menu 
@@ -1795,6 +1847,8 @@ class UDE
             editor.instance.initialise( element.id);
         } else {
             // Editor not loaded
+            console.log( "Module required but not yet loaded " + editor.src);
+            /*
             // Load if necessary
             let holder = this.dom.element( 'UD_requiredModules');
             let requiredByApp = ( holder) ? this.dom.element( 'UD_requiredModules').textContent : ""
@@ -1803,6 +1857,7 @@ class UDE
                 if ( requiredByApp.indexOf( module) == -1)
                     this.loadScript( editor.src, "window.ud.ude.modules['"+exTag+"']['instance']="+editor.onload, editor.className, exTag);
             }
+            */
             // Do early/standard initialisation if JSON100format and no HTML provided 
             if ( 
                 element.childNodes.length == 1 // more than 1 child element means cached HTML
@@ -1820,15 +1875,7 @@ class UDE
                 if ( meta)
                 {                    
                     let id = JSONvalue( meta, 'name');
-                    /* 2DO Decide rules on carrying thru styles
-                      Currently, leave to CSS selector "div.list.input ul" for example
-                      Idea UL_input means input on UL element if found in data
-                    // USe container's style to set class names of data
-                    let classNames = element.className.replace( type, '').trim();
-                    gvalPath( json, 'meta/class', classNames);
-                    */
-                    let classNames = this.dom.keepPermanentClasses( element.className, true).split( ' ');
-                    let editZone = this.dom.udjson.putElement( json, id+'_object',"", classNames[0]);  // could be just sourceId_object (ie jsonOrSource)
+                    let editZone = this.dom.udjson.putElement( json, id+'_object',"", this.dom.keepPermanentClasses( element.className, true));  // could be just sourceId_object (ie jsonOrSource)
                     element.appendChild( editZone);
                     if ( [ 'div.table'].indexOf( exTag) > -1) { this.updateTable( meta.name);}  
                     let divsInEdit = this.dom.elements( 'div', editZone);
@@ -1841,6 +1888,7 @@ class UDE
                     let me = this;
                     setTimeout( function() { me.initialiseElement( element);}, 100); 
                 }
+                
             } else {
                 // Try to initialise later to give time for module to be loaded
                 let me = this;
@@ -1942,7 +1990,8 @@ class UDE
                 element.innerHTML = "";
                 eventType = "create";
             }
-            element = this.dom.changeTag( element, newTag, newUdeType);         
+            element = this.dom.changeTag( element, newTag, newUdeType);    
+            if ( subType) this.dom.attr( element, 'ud_subtype', subType);     
             // Add classes automatically
             let autoClass = $$$.getTagOrStyleInfo( exTag, "autoClass");
             if ( autoClass) {
@@ -1956,7 +2005,7 @@ class UDE
             // Let view-model know about tag change
             let newHasPanel = this.dom.elements( 'div.panel-block', element).length;
             if ( !newHasPanel) this.dataSource.viewEvent( eventType, element);
-            if ( subType) this.dom.attr( element, 'ud_subtype', subType);
+            
             // Initialise element
             if ( newUdeType && !newHasPanel) this.initialiseElement( element.id); // so as to upload module ( "create", element);
         }
@@ -1997,7 +2046,7 @@ class UDE
   * @apiSuccess {boolean} return True if added
   * @apiGroup Elements
   */
-  changeClass( className, elementOrId, clearClasses = null, changeChildren = true) {
+  changeClass( className, elementOrId, clearClasses = null, changeChildren = ( elementOrId != 'document')) {
     let element = this.dom.element( elementOrId);
     if ( !element) return debug( { level:3, return:false}, "Can't change class on", elementOrId);
     // className may have . for multiple classes
@@ -2007,7 +2056,7 @@ class UDE
     if ( clearClasses)
     {    
         // Clear classes
-        let clear = clearClasses.split( ',');
+        let clear = ( typeof clearClasses == 'string') ? clearClasses.split( ',') : clearClasses;
         for ( let cleari=0; cleari < clear.length; cleari++) {
             // 2DO Look for mapTo for this class, add to list of clear once!
             if ( element.classList.contains( clear[ cleari])) {
@@ -2073,7 +2122,7 @@ class UDE
     }
     */
     // Change class inside element
-    if ( changeChildren) API.dispatchClassChange( element, oldClass, className);
+   if ( changeChildren) API.dispatchClassChange( element, oldClass, className);
      
    return changed;    
   } // ude.changeClass()
@@ -2302,10 +2351,11 @@ class UDE
     * @param {string} elem The element whose text content has changed
     * @param {boolean} forceSave Force informing VIEW-MODEL to provoke saving
     * @return {HTMLelement} Inserted HTML element
-    * @api {JS} API.focus(elementOrId) Put focus on an element
-    * @apiParam {string} id ID ofelement to get focus
-    * @apiSuccess {HTMLelement} return ELement with focus
-    * @apiError {object} return null
+    */
+   /**
+    * @api {JS} API.setChanged(elementOrId,forceSave) Set an element as modified
+    * @apiParam {string} elemntOrId Element that has been modified or its id
+    * @apiSuccess {HTMLelement} return null
     * @apiGroup Elements
     */           
     setChanged( elementOrId, forceSave = false) {
@@ -2316,45 +2366,35 @@ class UDE
             elem = this.dom.cursor.HTMLelement;
         } 
         if ( !elem) return null;
-    
-        // 2DO elem should be changed table
         // Let editor module know about the change
         this.dispatchChangeEvent( elem);
-    
         // Let calculator know about the change
         this.calc.checkDependencies( elem);
-    
         // Let rollbacker know about the change No doing this in key event and 2stage editing to get previous content
         // if ( window.rollbacker) window.rollbacker.inputEvent( {event:"change"}, elem);
-        
         // Check pagination
         API.checkPagination( elem);
-        
-        // 2DO if composite and change is in element name then change names (could be an attribute)
-
-        // Check if modified element or parent has auto-save disabled
-        if (  !forceSave && this.dom.parentAttr( elem, "ude_autosave").toLowerCase() == "off") {
-            // Don't mark as changed if auto-save (ude_autosave) is off
-            debug( {level:3}, "Auto update disabled on "+this.dom.cursor.HTMLelement.id);
-            return;
-        }
-        // Get element's context
+        // Check if marking element for saving is not required
         let saveable = this.dom.getSaveableParent( elem);
+        if (  !saveable || (!forceSave && this.dom.parentAttr( elem, "ude_autosave").toLowerCase() == "off")) return null;
+        // Remove initialcontent class as element is modified
+        saveable.classList.remove( 'initialcontent');
+        if ( this.dom.keepPermanentClasses( saveable.className, true) == "") saveable.classList.add( 'neutral'); // !IMPORTANT avoid empty class for saving on OS
+        // if ( saveable.className == "") saveable.classList.add( 'standard'); // !IMPORTANT avoid empty class for saving on OS
+        // 2DO Changes are watched by a module
         saveable.classList.remove( 'modified');
         // Trial pseudo for temporary elements such as unconfigured view
         if ( this.dom.attr( saveable, 'ud_oid') == "__NONE__") return null;
         // this.reFloatConfig( saveable);
+        // Find binded element
         let displayable = this.dom.getParentWithAttribute( 'ude_bind', elem);   
         let target = this.dom.element( this.dom.attr( displayable, 'ude_bind'));
-        let udtype = this.dom.attr( saveable, 'ud_type');    
-        if ( target && udtype) {
-            // Modified element is binded to another element, so update this target element
-            if (  this.dispatchEvent( {event:'save', target:target}, displayable))
-                return this.dataSource.viewEvent( "change", saveable); // this.setChanged( saveable);    
-        } else {
-           // Let VIEW-MODEL know about the change
-            return this.dataSource.viewEvent( "change", saveable);
-        }
+        let udtype = this.dom.attr( saveable, 'ud_type');
+        let viewEvent = true;
+        // Generate save event to binded element & only inform view model if event successfully handled
+        if ( target && udtype) viewEvent = this.dispatchEvent( {event:'save', target:target}, displayable);
+        // Let VIEW-MODEL know about the change
+        if ( viewEvent) return this.dataSource.viewEvent( "change", saveable);        
         return null;
     } // UDE.setChanged()
   
@@ -2443,6 +2483,9 @@ class UDE
                 case "chart" :
                     this.dispatchEvent( {event:event, target:target}, element);
                     break;
+                case "image":
+                    this.dispatchEvent( event, target);
+                    break;
                 default :    
                     break;
             }
@@ -2450,7 +2493,7 @@ class UDE
     } // UDE.dispatchChangeEvent()
   
    /**
-    * @api {JS} API.insertTextAtCursor(html) Insert text at cursor and mark element as changed
+    * @api {JS} API.insertTextAtCursor(text) Insert text at cursor and mark element as changed
     * @apiParam {string} html HTML code to insert
     * @apiParam {mixed} at Id of element where to insert after or the HTML element itself
     * @apiGroup Elements
@@ -2461,17 +2504,45 @@ class UDE
         let offset = this.dom.cursor.textOffset;
         let content = element.textContent;
         let placeholder = this.dom.attr( element.parentNode, 'ude_place');
+        let cursor = this.dom.cursor;
         if ( content == placeholder) {
+            // Replace content
             element.textContent = text;
+            // Place cursor at end of current item
+            this.dom.cursor.setAt( element, 10000);
         } else {
+            if ( this.cursor.selectionInNode) {
+                // Replace selected text with pasted text
+                content = content.substring( 0, cursor.textOffset) + content.substring( cursor.focusOffset);
+            }
+            // Insert content
             element.textContent = content.substring(0, offset)+text+content.substring(offset, content.length);
+            // Place cursor at end of insert
+            this.dom.cursor.setAt( this.dom.cursor.HTMLelement, offset + text.length);
         }
         // 2DO could use textEditorAttr
         if ( this.dom.getParentAttribute( "", "ude_autosave", this.dom.cursor.HTMLelement) == "off")
             debug( {level:3}, "Auto update disabled in insertTextAtCursor on "+this.dom.cursor.HTMLelement.id);
         else  
            this.setChanged( this.dom.cursor.HTMLelement);
-    } // UDE.inertTextAtCursor
+    } 
+
+     /**
+    * @api {JS} API.replaceTextAtCursor(text) Fill current HTML element with text and mark as changed
+    * @apiParam {string} text Text to insert
+    * @apiParam {mixed} at Id of element where to insert after or the HTML element itself
+    * @apiGroup Elements
+    */
+    replaceTextAtCursor( text, type) {
+        //this.dom.cursor.fetch();
+        let element = this.dom.cursor.HTMLelement;
+        this.dom.cursor.textElement.textContent = text;
+        // 2DO could use textEditorAttr
+        if ( this.dom.getParentAttribute( "", "ude_autosave", element) == "off")
+            debug( {level:3}, "Auto update disabled in insertTextAtCursor on "+element.id);
+        else  
+           this.setChanged( element);
+    }
   
    /**
     * @api {JS} API.insertHTMLAtCursor(html) Insert HTML at cursor and mark element as changed
@@ -2499,7 +2570,7 @@ class UDE
             debug( {level:3}, "Auto update disabled in insertTextAtCursor on "+this.dom.cursor.HTMLelement.id);
         else  
             this.setChanged( element);
-    } // UDE.inertTextAtCursor
+    } 
   
    /**
     * Return true if element requires 2-stage editing after setting up editing, otherwise return false. Abandon any ongoin 2 stage eduting.
@@ -2705,7 +2776,12 @@ class UDE
             // ude_onvalid hook
             let code = this.dom.attr( editingElement, 'ude_onvalid');
             if ( save && code) {
+                // Get saveable
+                let saveable = this.dom.getSaveableParent( editingElement);
+                // Replace id or name
                 if ( editingElement.id) { code = code.replace( /{id}/g, editingElement.id);}
+                else code = code.replace( /{id}/g, saveable.id);
+                code = code.replace( /{name}/g, this.dom.attr( saveable, 'name'));
                 doOnupdate( code);
             } 
             // Change event if content or attributes have changed          
@@ -2933,12 +3009,14 @@ class UDE
     */     
     hasDefaultContent( elementOrId) {
         let element = this.dom.element( elementOrId);
+        let saveable = this.dom.getSaveableParent( element);
         // Get default content to compare with        
         let defaultContent = this.dom.udjson.value( UD_defaultContentByExTag, this.dom.attr( element, 'exTag')); 
         if ( !defaultContent) { defaultContent = "...";}
         return ( 
-            element.classList.contains('initialcontent') 
-            || API.getEditorAttr( element, 'ude_place') /*this.dom.attr( element, 'ude_place')*/ == element.innerHTML
+            /* element.classList.contains('initialcontent') || */
+            /*( $$$.dom.attr( saveable, 'ud_type') == 'html' && saveable.classList.contains( 'initialcontent') && saveable.classList.contains( 'input'))
+            ||*/ API.getEditorAttr( element, 'ude_place') == element.innerHTML
             || ( defaultContent && element.innerHTML == defaultContent)             
         );
     }  // DOM.hasDefaultContent()
@@ -2952,7 +3030,7 @@ if ( typeof process == 'object')
     // Testing under node.js
     testThis = false;
     // Load modules associated with UDE
-    const udecalc = require( "../app/calculator/udecalc.js");
+    const udecalc = require( "./udecalc.js");
     const UDEcalc = udecalc.UDEcalc; 
     window.UDEcalc = udecalc.UDEcalc;        
     module.exports = { UDE: UDE, CALC: window.UDEcalc};
@@ -2964,7 +3042,7 @@ if ( typeof process == 'object')
         var envMod = require( '../tests/testenv.js');
         envMod.load();
         // Load additionnal modules required for test
-        const udedraw = require( "../../app/elements/udedraw.js");
+        const udedraw = require( "../modules/editors/udedraw.js");
         const UDEdraw = udedraw.UDEdraw; 
         window.UDEdraw = udedraw.UDEdraw;    
         //console.log( typeof global.JSDOM);

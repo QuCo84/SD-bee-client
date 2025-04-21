@@ -64,7 +64,7 @@ class UDutilities
         // Get oid array for document
         let oid = this.dom.attr( this.ud.topElement, 'ud_oid').split( '--');
         // Fill Names zone if needed
-        if ( namesZone && this.dom.children( namesZone).length < 1) {
+        if ( namesZone && this.dom.children( namesZone).length < 2) {
             // Add title before Names zone
             this.dom.insertElement( 'h1', T("Manage doc"), {}, namesZone);
             // Fill Names zone
@@ -118,7 +118,7 @@ class UDutilities
             }*/
         }
         // Fill Paramaters zone if needed
-        if ( paramZone && this.dom.children( paramZone).length < 1) {
+        if ( paramZone && this.dom.children( paramZone).length < 2) {
             // Fill Parameters zone 
             // Get doc's parameters            
             let system = json.parse( 'UD_system');
@@ -160,7 +160,7 @@ class UDutilities
             paramsEl.classList.add( 'hidden');
         }
         // Fill Actions zone if needed
-        if ( actionsZone && this.dom.children( actionsZone).length < 1) {
+        if ( actionsZone && this.dom.children( actionsZone).length < 2) {
             // Fill action zone
             let actions = {
                 tag: 'div', value: {
@@ -443,9 +443,32 @@ class UDutilities
                     // JSON100 element - do renaming once copied element added to DOM
                     newName = name + nameSuffix;                                     
                 }
+                /*
+                if ( !name) {
+                    // Give element a name so we can handle dependancy
+                    name = "CopyEl_" + window.udparams[ 'Autoindex_element']++;
+                }
+                // Link to source element by name
+                this.dom.attr( copyEl, 'ude_datasrc', name);
+                */
                 // Link to source for translation etc
                 // 2DO Use id of editable content (table, list ...)
                 this.dom.attr( copyEl, 'ude_datasrc', id);
+                /*
+                // Map image to source if not language sensitive
+                // 2DO udeimagepicker.js clear datasrc if change of tag
+                let exTag = this.dom.attr( copyEl, 'exTag');
+                if ( exTag == "div.image") {
+                    let img = this.dom.element( 'img', copyEl);
+                    if ( img) img = img.src;
+                    if ( img && this.nameHasLang( img)) {
+                        // IDEA force name
+
+                        this.dom.attr( copyEl, 'ud_selection', "__CLEAR__");
+                        this.dom.attr( copyEl, 'ud_filter', "__CLEAR__");
+                    }
+                }
+                */
                 // Add requiresAction class
                 copyEl.classList.add( 'ud_requiresAction');
                 let extra = API.json.parse( API.dom.attr( copyEl, 'ud_extra'));
@@ -1053,10 +1076,11 @@ class UDutilities
     
 } // JS Class UDutilities 
 
-if ( typeof process == 'object')
-{
+function UDutilities_init( ud, api) { return new UDutilities( ud, api);}
+
+if ( typeof process == 'object') {    
     // Testing under node.js
-    module.exports = { class: UDutilities};
+    module.exports = { class: UDutilities, init: UDutilities_init};
     //window.UDAJAX = UDAJAX;
     if ( typeof global.JSDOM == "undefined" && typeof window == "undefined")
     {
@@ -1070,8 +1094,8 @@ if ( typeof process == 'object')
         // Setup our UniversalDoc object
         ud = new UniversalDoc( 'document', true, 133);
         let test = "Manage part";
-        API.buildManagePart();
-        testResult( test, API.dom.element( 'UD_docParams'), API.dom.element( 'MANAGE_params'));
+        $$$.buildManagePart();
+        testResult( test, $$$.dom.elementByName( 'DocParameters'), $$$.dom.elementByName( 'Manage').innerHTML);
         console.log( "Test completed");
         process.exit();
     }    

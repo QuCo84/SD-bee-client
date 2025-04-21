@@ -30,7 +30,10 @@ let  UD_defaultContentByExTag = {
     h4:"...", 
     h5: "...", 
     h6: "...",      
-    p: "...",  
+    p: "...",
+    li: "...",
+    td: "...",
+    th: "...",
     "p.sub_paragraph": "...",
     "div.table": "Table{AutoIndex_table}",
     "div.list": "List{AutoIndex_list}", 
@@ -92,7 +95,7 @@ const UD_wellKnownElements = {
 const UD_appAttributes = [ 
     'data-ud-iheight', 'data-ud-pageHeight', 'data-ud-offset', 'data-ud-cursor', 'data-ud-debug', 'data-ud-refresh', 'data-ud-mode',
     'data-ud-dupdated', 'data-ud-dchanged', 'data-ud-oid', 'data-ud-oidchildren', 'data-ud-dsent', 'data-ud-fields', 'data-ud-saveId',
-    'data-ud-type', 'data-ud-subtype',  'data-ud-mime', 'data-ud-key', 'data-ud-extra', 'data-ud-hidden',
+    'data-ud-type', 'data-ud-subtype',  'data-ud-mime', 'data-ud-key', 'data-ud-extra', 'data-ud-attr', 'data-ud-hidden',
     'data-ud-onupdate', 'data-ud-onevent', 'data-ud-prepost', 'data-ud-model',
     'data-ud-content', 'data-ud-display', 'data-ud-follow', 'data-ud-dbaction',
     'data-ud-defaultPart', 'data-ud-quotes', 'data-ud-selection', 'data-ud-filter', 'data-ud-saveid',
@@ -101,15 +104,17 @@ const UD_appAttributes = [
     'data-ude-place', 'data-ude-onclickformula', 'data-ude-rowidformula', 'data-ude-updateaction', 'data-ude-validate',
     'data-ude-editzone', 'data-ude-autoplay', 'data-ude-onvalid', 'data-ude-oninvalid',
     'data-ude-accept', 'data-ude-pageno', 'data-ude-check', 'data-ude-input', 'data-ude-form', 'data-ude-ui','data-ude-editzone',
-    'data-udc-step', 'data-udc-scenario', 
+    'data-ude-selection', 'data-ude-filter',
+    'data-udc-step', 'data-udc-scenario',
     'data-udapi-quotes', 'data-udapi-callbackid', 'data-udapi-value1',
     'data-cb-type', 'data-cb-tags',
     'data-rb-time', 'data-rb-action',
+    'data-ud-lang', 'data-from-model',
     //'_editable', '_dataset', '_add', 'target_id', '_onclick', '_type'
     /* legacy */
     'ud_iheight', 'ud_pageHeight', 'ud_offset', 'ud_cursor', 'ud_debug', 'ud_refresh', 'ud_mode',
     'ud_dupdated', 'ud_dchanged', 'ud_oid', 'ud_oidchildren', 'ud_dsent', 'ud_fields', 'ud_saveId', 
-    'ud_type', 'ud_subtype',  'ud_mime', 'ud_key', 'ud_extra', 'ud_hidden', 
+    'ud_type', 'ud_subtype',  'ud_mime', 'ud_key', 'ud_extra', 'ud_attr', 'ud_hidden', 
     'ud_onupdate', 'ud_onevent', 'ud_prepost', 'ud_model', 
     'ud_content', 'ud_display', 'ud_follow', 'ud_dbaction',
     'ud_defaultPart', 'ud_quotes', 'ud_selection', 'ud_filter', 'ud_saveid',
@@ -118,16 +123,19 @@ const UD_appAttributes = [
     'ude_place', 'ude_onclickformula', 'ude_rowidformula', 'ude_updateaction', 'ude_validate', 
     'ude_editZone', 'ude_autoplay', 'ude_onvalid', 'ude_oninvalid',
     'ude_accept', 'ude_pageno', 'ude_check', 'ude_input', 'ude_form', 'ude_ui', 'ude_editzone',
-    'udc_step',  'udc_scenario',  
+    'ude-selection', 'ude-filter',
+    'udc_step',  'udc_scenario', 
     'udapi_quotes', 'udapi_callbackid', 'udapi_value1',
     'cb_type', 'cb_tags',
-    'RB_time', 'RB_action'   
+    'RB_time', 'RB_action',
+    'ud_lang', 'fromModel',   
+
 ];
 const UD_domAttributes = [
     'onclick', 'contenteditable', 'onchange', 'draggable', 'ondragstart', 'ondragend', 'ondrop', 
     'class', 'id', 'name', 'src', 'onscroll',
     'width', 'height', 'href', 'placeholder', 'title', 'tagName', 'style', 'type',
-    '_editable', '_datadest', '_add', 'target_id', '_onclick', '_type', 
+    '_editable', '_datadest', '_add', 'target_id', '_onclick', '_type', /* replaced with ude_datasrc 'datasrc',*/
     'x', 'y', "onmouseover", "onmousenter", "onmouseout", "value", "checked",
     "sandbox", "spellcheck", "max"
 ];

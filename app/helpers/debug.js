@@ -9,7 +9,15 @@
  * Ideas to remove this security hotspot : hash validation, code filtering,  hard-coding, prefixing function calls
  */
  function doOnload( onload) {
-     if ( onload && typeof onload == "string") return eval( onload);
+    if ( onload && typeof onload == "string") {
+        let r = "";
+        try {
+            r = eval( onload);
+        } catch ( error) {
+            console.error( error, onload);            
+        }
+        return r;
+    }
  }
  
 /** 
@@ -392,7 +400,7 @@ if ( typeof process == 'object')
 {
     // Testing under node.js
     // console.log( 'Declaring for nodejs');
-    var displaylib = require( "../../app/helpers/display_lib.js");
+    var displaylib = require( "../debug/display_lib.js");
     module.exports = { 
         debug: debug, L_new:L_new, dumpElement:dumpElement, testResult:testResult, debug_callerFct:debug_callerFct, 
         DEBUG_checksum:DEBUG_checksum, RegisterBlock:displaylib.RegisterBlock, ShowBlock:displaylib.ShowBlock, Zone:displaylib.Zone,

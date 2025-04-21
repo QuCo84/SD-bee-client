@@ -1,0 +1,3 @@
+Start of test program
+Syntax:OK
+Test completed

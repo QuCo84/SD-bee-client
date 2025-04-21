@@ -108,6 +108,8 @@ class DOM
   // 2DO fill dynamically form class info
   // displayableTags = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "td"];
   classMap = {}; // Trial
+
+  editClasses = [ 'editing', 'edcontainer', 'edinside', 'menu-on', 'hidden'];
   
   dummyText = "...";
   
@@ -132,7 +134,7 @@ class DOM
    * Accès aux valeurs du DOM
    */
     JSONget( element) { return this.udjson.getElement( element);}
-    JSONput( json, sourceId = "", parentTag = "") { return this.udjson.putElement( json, sourceId, parentTag);}
+    JSONput( json, sourceId = "", parentTag = "", containerClass = "") { return this.udjson.putElement( json, sourceId, parentTag, containerClass);}
     // For UDEcalc the calculator
     value( path, value=null, element = null) { return this.domvalue.value( path, value, element);}
   
@@ -160,13 +162,13 @@ class DOM
     * @return {mixed} Attribute's value, null if element or attribute not found
     */
    /** 
-    * @api {JS} API.dom.attr(elementOrId,attrName,value=null) attr() - read/write an attribute of an HTML element
+    * @api {JS} $$$.dom.attr(elementOrId,attrName,value=null) attr - read/write an attribute of an HTML element
+    * @apiName attr
     * @apiParam {mixed} element The HTML element whose attribute is to be written or its id
     * @apiParam {string} attrName Name of the attribute, special cases: starts with "computed_" use computed style, "exTag" = tag.ud_type
     * @apiParam {mixed} value Read if null, clear attribute if "__CLEAR__", otherwise set attribute
     * @apiSuccess {mixed} return Attribute's value, "" if element or attribute not found
-    * @apiGroup Elements
-    * @apiName attr
+    * @apiGroup $$$.dom
     *    
     */
     attr( elementOrId, attrName, value=null){
@@ -394,7 +396,11 @@ class DOM
     */
     textContent( elementsOrIds) {
         let text = "";
-        if ( typeof elementsOrIds == "string") elementsOrIds = [ elementsOrIds];
+        if ( !elementsOrIds) return text;
+        if ( 
+            typeof elementsOrIds == "string" 
+            || ( typeof elementsOrIds == 'object' && typeof elementsOrIds.tagName != "undefined")
+         ) elementsOrIds = [ elementsOrIds];
         for ( let eli=0; eli < elementsOrIds.length; eli++) {
             let element = this.element( elementsOrIds[ eli]);
             if ( !element || element.nodeType != Node.ELEMENT_NODE) continue; 
@@ -435,7 +441,15 @@ class DOM
     */
    /**
     *  ELEMENT ACCESS
-    */    
+    */  
+
+    /**
+    * @api {JS} API.dom.isDOM( element) Return true if is a DOM element
+    * @apiParam {object} element The element to check
+    * @apiSuccess {boolean} True if element is a DOM element
+    * @apiGroup Elements
+    */
+    isDOM( element) { return ( element && typeof element.tagName != "undefined");}
     
    /**
     * Get an HTML element
@@ -549,13 +563,18 @@ class DOM
         {
             let node = found[ foundi];
             if  ( node.nodeType != Node.ELEMENT_NODE) continue;
-            let id = node.id;            
-            if ( 
-               (!after && !before)
-               || ( id && ( !after || id > after) && ( !before || id < before))
-            ) {
-                // Keep this node
+            if ( !after && !before) {
+                // Keep node without testing id
                 result.push( node);
+            } else {
+                // Keep node if it's id is between after and before limits
+                let saveable = this.getSaveableParent( node);
+                if ( !saveable) continue;
+                let id = saveable.id;            
+                if ( ( !after || id > after) && ( !before || id < before)) {
+                    // Keep this node
+                    result.push( node);
+                }
             }
         }    
         return result;
@@ -1076,6 +1095,7 @@ class DOM
             if ( 
                 classn != "part" && classn != "view"
                 && classn != viewType && classn.indexOf( UD_layoutPrefix) != 0
+                && this.editClasses.indexOf( classn) == -1
             ) {
                 // This is the user-defined layout class
                 return classn;
@@ -1100,17 +1120,20 @@ class DOM
     * Return true if element has default content
     * @param {HTMLelement} elementOrId The HTML element or its id
     * @return {boolean} True if content is 'placeholder'
-    * Replaced with same functon in ude.js
+    * Replaced with same functon in udresources.js
     */     
     hasDefaultContent( elementOrId) {
         let element = this.element( elementOrId);
         if ( !element) return false;
         // Get default content to compare with        
-        let defaultContent = this.udjson.value( UD_defaultContentByExTag, this.attr( element, 'exTag')); 
+        let exTag = this.attr( element, 'exTag');
+        let defaultContent = $$$.getTagOrStyleInfo( exTag, 'defaultContent');
+        if ( !defaultContent) defaultContent = this.udjson.value( UD_defaultContentByExTag, this.attr( element, 'exTag')); 
         return ( 
             element.classList.contains('initialcontent') 
             || this.attr( element, 'ude_place') == element.innerHTML
-            || ( defaultContent && element.innerHTML == defaultContent)             
+            || ( defaultContent && element.innerHTML == defaultContent)   
+            || !element.innerHTML          
         );
     }  // DOM.hasDefaultContent()
     
@@ -1259,7 +1282,7 @@ class DOM
             // Edit zone goes with previous element, so skip
             before = before.nextSibling;
         }
-        debug( {level:5}, "Inserting in DOM", unattachedElement, before);
+        debug( {level:6}, "Inserting in DOM", unattachedElement, before);
         var newElement = null;
         if ( before)
         {
@@ -1430,6 +1453,7 @@ class DOM
                 else if ( this.cursor.textElement && this.cursor.textOfffset == 0) {
                     before = this.cursor.textElement;
                 }  
+                else before = null;
             } else { 
                 parent = at;
                 before = null;
@@ -1846,7 +1870,7 @@ class DOM
         let overflowY = "";
         while ( 
             walk
-            && walk != this.topElement            
+            && walk != this.topElement.parentNode.parentNode            
             && walk.style.display != "none"
             && !walk.classList.contains( 'hidden')
             && ( walk.style.opacity == "" || walk.style.opacity != 0)
@@ -1867,7 +1891,7 @@ class DOM
                 */
                 if ( 
                     element.offsetTop >= container.scrollTop 
-                    && ( element.offsetTop /*+ element.clientHeight*/) <= ( container.offsetTop + container.offsetHeight + 10)
+                    && ( element.offsetTop /*+ element.clientHeight*/) <= ( container.scrollTop + container.offsetHeight + 10)
                 ) {
                     r = true;
                 } 
@@ -1948,7 +1972,7 @@ class DOM
     } // DOM.isHTML()
     
    /**
-    * @api {JS} API.getSelector(element) Return a selector (ie path to) to find an element
+    * @api {JS} API.getSelector(element) Return a selector (ie path to) to find an element that can be used with element
     * @apiParam element The element to point too
     * @apiGroup Elements
     */
@@ -2004,8 +2028,15 @@ class DOM
             setTimeout( function() { API.dom.arrangeTable( tableId, false);}, 500); 
             return;           
         }
-        let table = this.element( tableId);
-        if ( !table || table.classList.contains( 'textContent') || !this.isVisible( table)) { return;}
+        let table = this.element( tableId);        
+        if ( !table || table.tagName != "TABLE" || table.classList.contains( 'textContent') /*|| !this.isVisible( table)*/) { 
+            if ( table.tagName != "TABLE") console.error( "Bad arrange table request", tableId, table);
+            return;
+        }
+
+        let layout = this.attr( table, 'computed_tableLayout');
+        let fixed = ( layout == 'fixed');
+        //if ( fixed) return;
        /* if ( to && table.id) { 
             // Initialising so delay execution
             setTimeout( function() { API.dom.arrangeTable( table.id, false);}, 500); 
@@ -2015,23 +2046,25 @@ class DOM
             let tableHead = API.dom.element( 'thead', table);
             let tableBody = API.dom.element( 'tbody', table);
             // 2DO look for display block
+            let bodyCharLength = [];
+            let bodyMeanCharLength = [];
+            let bodyCharTotal = 0;
+            let maxColCharLength = []
+            let rowCount = tableBody.rows.length;  
             if ( tableBody && tableHead) {
                 // Link scrolling of head with body
                 API.dom.attr( tableBody, 'onscroll', "this.previousSibling.scrollLeft = this.scrollLeft;");
                 let fontSize = 16;            
                 let cols = tableHead.rows[0].cells;
                 // 2DO only continue if dataset or overflow-x:scroll or no width set  
-                // Pass 1 - get total/average column widths in chars
-                let bodyCharLength = [];
-                let bodyCharTotal = 0;
-                let maxColCharLength = []
-                let rowCount = tableBody.rows.length;                
+                // Pass 1 - get total nb of characters per column & average by row
                 for ( let coli=0; coli < cols.length; coli++) {
                     let titleWidth = tableHead.rows[0].cells[ coli].textContent.length;
                     bodyCharLength.push(0);
                     maxColCharLength.push(0);
                     for ( let rowi =0; rowi < rowCount; rowi++) {
                         let colb = tableBody.rows[ rowi].cells[ coli];
+                        if ( !colb) continue;
                         // Get length of longest line in text                        
                         let colTextA = colb.innerHTML.split( "<br>");
                         let colLen = 0;
@@ -2052,24 +2085,44 @@ class DOM
                         if ( len > maxColCharLength[ coli]) maxColCharLength[ coli] = len;
                         bodyCharTotal += len;
                         // 2DO ensure right justif if nb
-                    }                    
+                    } 
+                    bodyMeanCharLength[ coli] = Math.round( bodyCharLength[ coli]/ rowCount);
                 }                 
                 if ( !bodyCharTotal) return;
-                // Pass 2 - set body & head widths in pixels for each column
+                // Pass 2 - Decide font size for each column and adjust character counts
+                let fontSizes = [];
+                for ( let coli=0; coli < cols.length; coli++) {
+                    let colb = cols[ coli];
+                    fontSizes[ coli] = 1;
+                    if ( bodyMeanCharLength[ coli] > bodyCharTotal / 20) {
+                        // Column's average character count is more than 20% of total
+                        let txtLen = colb.textContent.length;
+                        let reduc = txtLen / bodyMeanCharLength[ coli];
+                        if ( reduc > 2) reduc = 0.5; else reduc = 0.8;
+                        fontSizes[ coli] = reduc;
+                        bodyCharTotal -= Math.round( bodyMeanCharLength[ coli] * ( 1 - reduc));
+                        bodyCharLength[ coli] *= reduc;
+                        bodyMeanCharLength[ coli] *= reduc;   
+                        maxColCharLength[ coli] *= reduc;                    
+                    }
+                }
+                // Pass 3 - set body & head widths in pixels and font size for each cell in each column
                 let maxTableWidth = this.attr( table, UD_useComputedPrefix+'maxWidth'); 
                 let visibleWidth = table.parentNode.getBoundingClientRect().width - 5 * cols.length;
                 let transformRatio = 1;
                 let view = API.getView( table);
                 let transform = this.attr( view, 'computed_transform');
                 if ( transform && transform != "none") {
-                    let w = transform.match( /matrix\(([^,]*),/)
-                    if ( w.length > 1) transformRatio = parseFloat( w[1]);
+                    console.log( 'Transform='+transform);
+                    let w = transform.match( /matrix\(([^,]*),/);
+                    console.log( w);
+                    if ( w && w.length > 1) transformRatio = parseFloat( w[1]);
                 }
+                // Loop through columns
                 for ( let coli=0; coli < cols.length; coli++) {
                     let colh = cols[ coli];
-                    // let colb = tableBody.rows[0].cells[ coli];
-                    // let width = colb.getBoundingClientRect().width - 2;
-                    bodyCharTotal *= transformRatio;
+                    // Compute pixel width of each column
+                    bodyCharTotal *= transformRatio;                    
                     let widthPerCent = Math.round( 100*bodyCharLength[ coli]/bodyCharTotal);
                     let width = Math.round( visibleWidth * bodyCharLength[ coli]/bodyCharTotal);
                     let minWidth = Math.min( 
@@ -2077,31 +2130,30 @@ class DOM
                         ( widthPerCent > 35) ? Math.round( width*0.6) : width
                     )/transformRatio;
                     let useWidth = 0;
-                    if ( maxTableWidth && maxTableWidth != "none") {
-                        // If table has max-width then use this for scollable table
+                    if ( fixed) {
+                        useWidth = Math.round( visibleWidth / cols.length);
+                    } else if ( maxTableWidth && maxTableWidth != "none") {
+                        // If table has max-width then use this for scrollable table
                         let maxWidth = Math.round( maxTableWidth * bodyCharLength[ coli]/bodyCharTotal);
                         useWidth = Math.min( fontSize*maxColCharLength[ coli], maxWidth);
                     } else {
                         // Use visible width to avoid horizontal scrolling
-                        useWidth = width;
+                        useWidth = width;                        
                     }
                     if ( useWidth > 0) {
+                        // Loop through rows
                         for ( let rowi=0; rowi < tableBody.rows.length; rowi++) {
+                            // Set width
                             let colb = tableBody.rows[ rowi].cells[coli];
+                            if ( !colb) continue;
                             colb.style.minWidth = useWidth + "px";
                             colb.style.maxWidth = useWidth + "px";
+                            // Adjust font size
+                            if ( fontSizes[ coli] != 1) colb.style.fontSize = fontSizes[ coli] + "em";
+
                         }
                         colh.style.minWidth = useWidth + "px";
                         colh.style.maxWidth = useWidth + "px";
-
-                        /*
-                        colb.style.minWidth = minWidth + "px";
-                        colb.style.maxWidth = maxWidth + "px";
-                        colb.style.width = width + "px";
-                        colh.style.minWidth = minWidth + "px";
-                        colh.style.maxWidth = maxWidth + "px";
-                        colh.style.width = width + "px";
-                        */
                     }
                 } 
             }
@@ -2109,6 +2161,15 @@ class DOM
     }    
     
     arrangeTables( view) {
+        /*
+        let tables = this.elements( 'div.table', view);
+        tables.merge( this.elements( 'div.connector', view));
+        for ( let tablei=0; tablei < tables.length; tablei++) {
+            let tableEl = tables[ tablei];
+            let table = this.element( 'table', tableEl);
+            this.arrangeTable( table, false);
+        }
+        */
         let tables = this.elements( 'table', view);
         for ( let tablei=0; tablei < tables.length; tablei++) {
             let table = tables[ tablei];
@@ -2123,7 +2184,7 @@ if ( typeof process == 'object') {
     if ( typeof global.JSDOM == "undefined" && typeof window == "undefined") global.ModuleUnderTest = "DOM";
     let domcursor = require( "./domcursor.js");
     const DOM_cursor = domcursor.DOM_cursor;    
-    let udjsonmod = require( "../$$$/udjson.js");
+    let udjsonmod = require( "../ud-utilities/udjson.js");
     const UDJSON = udjsonmod.UDJSON;    
     let domvaluemod = require( "./domvalue.js");
     const DOMvalue = domvaluemod.DOMvalue;    
@@ -2133,7 +2194,7 @@ if ( typeof process == 'object') {
         console.log( 'Syntax dom.js OK');           
         console.log( 'Start of dom.js test program');
         // Setup browser emulation
-        let path = "../..";
+        let path = "..";
         const testMod = require( path+'/tests/testenv.js');
         testMod.load( []);    
         // Setup our DOM object

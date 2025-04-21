@@ -8,7 +8,7 @@ SD bee - Simply Done<br>
 
 ## WHAT'S INCLUDED
 
-The "SD bee client" package contains the Javascript sources of the client software used by SD bee. It also contains a simple PHP script for delivering files that handles versioning. To use the unmodified software, you may use the SD bee website as described in the SD bee project.
+The "SD bee client" package contains the Javascript sources of the client software used by SD bee. It also contains index.php, a script for delivering files that handles versioning. To use the unmodified software, you may use the SD bee website as described in the SD bee project.
 
 
 For more information on SD bee, please see the SD bee repository on GitHub.
@@ -44,9 +44,15 @@ SD bee is in search of software and business developpers interested in using the
 
 You can generate a complete minimised package and place this on your SD bee server.
 
+Copy the required modules from the modules sub-directories to the modules-autoload sub-directory in the app directory. Then execute the buildmin batch file in the build directory.
+
+Copy the min file to the SD bee server and copy the sdbee-client-min.js contents to the require-config.js file of the server.
+
 ### Setup a file server for the client files
 
 You can then configure your SD bee server to use this server for JS files.
 
-### 
+### Cloud
+
+A Google Cloud Storage bucket can be used to make files available on the web.
 
